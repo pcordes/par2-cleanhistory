@@ -70,7 +70,7 @@ am_par2_OBJECTS = par2cmdline.$(OBJEXT) commandline.$(OBJEXT) \
 par2_OBJECTS = $(am_par2_OBJECTS)
 par2_LDADD = $(LDADD)
 par2_DEPENDENCIES =
-DEFAULT_INCLUDES = -I. -I$(srcdir) -I.
+DEFAULT_INCLUDES = -I. -I$(srcdir) -I. -l../tbb20_20070815oss_src/include
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__depfiles_maybe = depfiles
 @AMDEP_TRUE@DEP_FILES = ./$(DEPDIR)/commandline.Po ./$(DEPDIR)/crc.Po \
@@ -227,7 +227,7 @@ par2_SOURCES = par2cmdline.cpp par2cmdline.h \
 	verificationhashtable.cpp verificationhashtable.h \
 	verificationpacket.cpp verificationpacket.h
 
-LDADD = -lstdc++
+LDADD = -lstdc++ -ltbb
 AM_CXXFLAGS = -Wall
 EXTRA_DIST = PORTING ROADMAP par2cmdline.sln par2cmdline.vcproj \
 	testdata.tar.gz pretest test1 test2 test3 test4 test5 test6 \

@@ -16,6 +16,11 @@
 //  You should have received a copy of the GNU General Public License
 //  along with this program; if not, write to the Free Software
 //  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+//
+//  Modifications for concurrent processing Copyright (c) 2007 Vincent Tan.
+//  Search for "#if WANT_CONCURRENT" for concurrent code.
+//  Concurrent processing utilises Intel Thread Building Blocks 2.0,
+//  Copyright (c) 2007 Intel Corp.
 
 #include "par2cmdline.h"
 
@@ -32,6 +37,10 @@ void banner(void)
   string version = PACKAGE " version " VERSION;
 
   cout << version << ", Copyright (C) 2003 Peter Brian Clements." << endl
+#if WANT_CONCURRENT
+       << "Modifications for concurrent processing Copyright (c) 2007 Vincent Tan." << endl
+       << "Concurrent processing utilises Intel Thread Building Blocks 2.0, Copyright (c) 2007 Intel Corp." << endl
+#endif
        << endl
        << "par2cmdline comes with ABSOLUTELY NO WARRANTY." << endl
        << endl
@@ -44,6 +53,10 @@ void banner(void)
 
 int main(int argc, char *argv[])
 {
+#if WANT_CONCURRENT
+  tbb::task_scheduler_init init;
+#endif
+
 #ifdef _MSC_VER
   // Memory leak checking
   _CrtSetDbgFlag(_CrtSetDbgFlag(_CRTDBG_REPORT_FLAG) | _CRTDBG_ALLOC_MEM_DF | /*_CRTDBG_CHECK_CRT_DF | */_CRTDBG_DELAY_FREE_MEM_DF | _CRTDBG_LEAK_CHECK_DF);

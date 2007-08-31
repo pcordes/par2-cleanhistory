@@ -16,6 +16,11 @@
 //  You should have received a copy of the GNU General Public License
 //  along with this program; if not, write to the Free Software
 //  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+//
+//  Modifications for concurrent processing Copyright (c) 2007 Vincent Tan.
+//  Search for "#if WANT_CONCURRENT" for concurrent code.
+//  Concurrent processing utilises Intel Thread Building Blocks 2.0,
+//  Copyright (c) 2007 Intel Corp.
 
 #ifndef __COMMANDLINE_H__
 #define __COMMANDLINE_H__
@@ -104,6 +109,10 @@ public:
   u64                    GetTotalSourceSize(void) const    {return totalsourcesize;}
   CommandLine::NoiseLevel GetNoiseLevel(void) const        {return noiselevel;}
 
+#if WANT_CONCURRENT
+  bool                   UseConcurrentProcessing(void) const { return useconcurrentprocessing; }
+#endif
+
   string                              GetParFilename(void) const {return parfilename;}
   const list<CommandLine::ExtraFile>& GetExtraFiles(void) const  {return extrafiles;}
 
@@ -150,6 +159,13 @@ protected:
   size_t memorylimit;          // How much memory is permitted to be used
                                // for the output buffer when creating
                                // or repairing.
+
+#if WANT_CONCURRENT
+  // although it is possible to specify how many threads that TBB should
+  // use, that functionality is not implemented (and the TBB documentation
+  // recommends not using it in production code), so this is merely a bool:
+  bool useconcurrentprocessing; // whether to process serially or concurrently
+#endif
 };
 
 typedef list<CommandLine::ExtraFile>::const_iterator ExtraFileIterator;

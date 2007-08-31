@@ -16,6 +16,11 @@
 //  You should have received a copy of the GNU General Public License
 //  along with this program; if not, write to the Free Software
 //  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+//
+//  Modifications for concurrent processing Copyright (c) 2007 Vincent Tan.
+//  Search for "#if WANT_CONCURRENT" for concurrent code.
+//  Concurrent processing utilises Intel Thread Building Blocks 2.0,
+//  Copyright (c) 2007 Intel Corp.
 
 #ifndef __PARCMDLINE_H__
 #define __PARCMDLINE_H__
@@ -255,6 +260,38 @@ using namespace std;
 #undef offsetof
 #endif
 #define offsetof(TYPE, MEMBER) ((size_t) ((char*)(&((TYPE *)1)->MEMBER) - (char*)1))
+
+#define WANT_CONCURRENT 1
+
+#if WANT_CONCURRENT
+  #include "tbb/task_scheduler_init.h"
+  #include "tbb/atomic.h"
+  #include "tbb/concurrent_hash_map.h"
+  #include "tbb/concurrent_vector.h"
+  #include "tbb/tick_count.h"
+  #include "tbb/blocked_range.h"
+  #include "tbb/parallel_for.h"
+  #include "tbb/mutex.h"
+
+  class CTimeInterval {
+  public:
+    CTimeInterval(const std::string& label) :
+      _label(label), _start(tbb::tick_count::now()), _done(false) {}
+    ~CTimeInterval(void) {  emit();  }
+    void  suppress_emission(void) { _done = true; }
+    void  emit(void) {
+      if (!_done) {
+        _done  =  true;
+        tbb::tick_count  end  =  tbb::tick_count::now();
+        cout << _label << " took " << (end-_start).seconds() << " seconds." << endl;
+      }
+    }
+  private:
+    std::string     _label;
+    tbb::tick_count _start;
+    bool            _done;
+  };
+#endif
 
 #include "letype.h"
 // par2cmdline includes

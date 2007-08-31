@@ -19,10 +19,11 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
+				AdditionalIncludeDirectories="..\tbb20_20070815oss_src\include;..\tbb20_20070815oss_src\src"
 				PreprocessorDefinitions="WIN32;_DEBUG;_CONSOLE;PACKAGE=\&quot;par2cmdline\&quot;;VERSION=\&quot;0.4\&quot;"
 				MinimalRebuild="TRUE"
 				BasicRuntimeChecks="3"
-				RuntimeLibrary="5"
+				RuntimeLibrary="3"
 				UsePrecompiledHeader="2"
 				PrecompiledHeaderThrough="par2cmdline.h"
 				WarningLevel="3"
@@ -32,6 +33,7 @@
 				Name="VCCustomBuildTool"/>
 			<Tool
 				Name="VCLinkerTool"
+				AdditionalDependencies="..\tbb20_20070815oss_src\ia32\vc7.1\lib\tbb_debug.lib"
 				OutputFile="$(OutDir)/par2.exe"
 				LinkIncremental="2"
 				GenerateDebugInformation="TRUE"
@@ -72,9 +74,10 @@
 				InlineFunctionExpansion="2"
 				FavorSizeOrSpeed="1"
 				OmitFramePointers="TRUE"
+				AdditionalIncludeDirectories="..\tbb20_20070815oss_src\include;..\tbb20_20070815oss_src\src"
 				PreprocessorDefinitions="WIN32;NDEBUG;_CONSOLE;PACKAGE=\&quot;par2cmdline\&quot;;VERSION=\&quot;0.4\&quot;"
 				StringPooling="TRUE"
-				RuntimeLibrary="4"
+				RuntimeLibrary="2"
 				EnableFunctionLevelLinking="TRUE"
 				UsePrecompiledHeader="2"
 				PrecompiledHeaderThrough="par2cmdline.h"
@@ -85,6 +88,7 @@
 				Name="VCCustomBuildTool"/>
 			<Tool
 				Name="VCLinkerTool"
+				AdditionalDependencies="..\tbb20_20070815oss_src\ia32\vc7.1\lib\tbb.lib"
 				OutputFile="$(OutDir)/par2.exe"
 				LinkIncremental="1"
 				GenerateDebugInformation="TRUE"

@@ -16,6 +16,11 @@
 //  You should have received a copy of the GNU General Public License
 //  along with this program; if not, write to the Free Software
 //  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+//
+//  Modifications for concurrent processing Copyright (c) 2007 Vincent Tan.
+//  Search for "#if WANT_CONCURRENT" for concurrent code.
+//  Concurrent processing utilises Intel Thread Building Blocks 2.0,
+//  Copyright (c) 2007 Intel Corp.
 
 #include "par2cmdline.h"
 
@@ -47,7 +52,14 @@ Par2Creator::Par2Creator(void)
 , creatorpacket(0)
 
 , deferhashcomputation(false)
+
+#if WANT_CONCURRENT
+, use_concurrent_processing(true)
+#endif
 {
+#if WANT_CONCURRENT
+  cout_in_use = 0;
+#endif
 }
 
 Par2Creator::~Par2Creator(void)
@@ -82,6 +94,12 @@ Result Par2Creator::Process(const CommandLine &commandline)
   string par2filename = commandline.GetParFilename();
   size_t memorylimit = commandline.GetMemoryLimit();
   largestfilesize = commandline.GetLargestSourceSize();
+
+#if WANT_CONCURRENT
+  use_concurrent_processing = commandline.UseConcurrentProcessing();
+  if (noiselevel > CommandLine::nlQuiet)
+    cout << "Processing with " << (use_concurrent_processing ? "multiple cores" : "a single core") << "." << endl;
+#endif
 
   // Compute block size from block count or vice versa depending on which was
   // specified on the command line
@@ -481,10 +499,93 @@ bool Par2Creator::ComputeRecoveryFileCount(void)
   return true;
 }
 
+
+#if WANT_CONCURRENT
+
+Par2CreatorSourceFile* Par2Creator::OpenSourceFile(const CommandLine::ExtraFile &extrafile)
+{
+    Par2CreatorSourceFile *sourcefile = new Par2CreatorSourceFile;
+
+    string path;
+    string name;
+    DiskFile::SplitFilename(extrafile.FileName(), path, name);
+
+    if (noiselevel > CommandLine::nlSilent) {
+      tbb::mutex::scoped_lock l(cout_mutex);
+      cout << "Opening: " << name << endl;
+    }
+
+    // Open the source file and compute its Hashes and CRCs.
+    if (!sourcefile->Open(noiselevel, extrafile, blocksize, deferhashcomputation))
+    {
+      delete sourcefile;
+      return false;
+    }
+
+    // Record the file verification and file description packets
+    // in the critical packet list.
+    sourcefile->RecordCriticalPackets(criticalpackets);
+
+    // Add the source file to the sourcefiles array.
+    //sourcefiles.push_back(sourcefile);
+
+    // Close the source file until its needed
+    sourcefile->Close();
+
+    return sourcefile;
+}
+
+class ApplyOpenSourceFile {
+    Par2Creator* const _obj;
+    const std::vector<CommandLine::ExtraFile>& _extrafiles;
+    tbb::concurrent_vector<Par2CreatorSourceFile*>& _res;
+    tbb::atomic<u32>& _ok;
+  public:
+    void operator()( const tbb::blocked_range<size_t>& r ) const {
+      Par2Creator* obj = _obj;
+      const std::vector<CommandLine::ExtraFile>& extrafiles = _extrafiles;
+      tbb::concurrent_vector<Par2CreatorSourceFile*>& res = _res;
+      tbb::atomic<u32>& ok = _ok;
+      for ( size_t it = r.begin(); ok && it != r.end(); ++it ) {
+        Par2CreatorSourceFile* sf = obj->OpenSourceFile(extrafiles[it]);
+        if (!sf) {
+          ok = false;
+          break;
+        } else
+          res.push_back(sf);
+      }
+    }
+
+    ApplyOpenSourceFile(Par2Creator* obj, const std::vector<CommandLine::ExtraFile>& v,
+      tbb::concurrent_vector<Par2CreatorSourceFile*>& res, tbb::atomic<u32>& ok) :
+      _obj(obj), _extrafiles(v), _res(res), _ok(ok) { _ok = true; }
+};
+
+#endif
+
+
 // Open all of the source files, compute the Hashes and CRC values, and store
 // the results in the file verification and file description packets.
 bool Par2Creator::OpenSourceFiles(const list<CommandLine::ExtraFile> &extrafiles)
 {
+#if WANT_CONCURRENT
+  if (use_concurrent_processing) {
+    std::vector<CommandLine::ExtraFile> v;
+    std::copy(extrafiles.begin(), extrafiles.end(), std::back_inserter(v));
+
+    tbb::concurrent_vector<Par2CreatorSourceFile*> res;
+    tbb::atomic<u32> ok;
+	tbb::parallel_for(tbb::blocked_range<size_t>(0, v.size()), ::ApplyOpenSourceFile(this, v, res, ok));
+    if (!ok)
+      return false;
+    std::copy(res.begin(), res.end(), std::back_inserter(sourcefiles));
+  } else for (ExtraFileIterator extrafile = extrafiles.begin(); extrafile != extrafiles.end(); ++extrafile) {
+    Par2CreatorSourceFile* sourcefile = OpenSourceFile(*extrafile);
+    if (!sourcefile)
+      return false; // error
+    sourcefiles.push_back(sourcefile);
+  }
+#else
   ExtraFileIterator extrafile = extrafiles.begin();
   while (extrafile != extrafiles.end())
   {
@@ -516,7 +617,7 @@ bool Par2Creator::OpenSourceFiles(const list<CommandLine::ExtraFile> &extrafiles
 
     ++extrafile;
   }
-
+#endif
   return true;
 }
 
@@ -866,6 +967,54 @@ bool Par2Creator::ComputeRSMatrix(void)
   return true;
 }
 
+
+#if WANT_CONCURRENT
+
+void Par2Creator::ProcessDataForOutputIndex(u32 outputblock, u32 outputendindex,
+                                            size_t blocklength, u32 inputblock)
+{
+    for( ; outputblock != outputendindex; ++outputblock ) {
+      // Select the appropriate part of the output buffer
+      void *outbuf = &((u8*)outputbuffer)[chunksize * outputblock];
+
+      // Process the data through the RS matrix
+      rs.Process(blocklength, inputblock, inputbuffer, outputblock, outbuf);
+
+      if (noiselevel > CommandLine::nlQuiet)
+      {
+        // Update a progress indicator
+        u32 oldfraction = (u32)(1000 * progress / totaldata);
+        progress += blocklength;
+        u32 newfraction = (u32)(1000 * progress / totaldata);
+
+        if (oldfraction != newfraction)
+        {
+//        tbb::mutex::scoped_lock l(cout_mutex);
+          if (0 == cout_in_use.compare_and_swap(outputendindex, 0)) { // <= this version doesn't block - only need 1 thread to write to cout
+            cout << "Processing: " << newfraction/10 << '.' << newfraction%10 << "%\r" << flush;
+            cout_in_use = 0;
+          }
+        }
+      }
+    }
+}
+
+class ApplyPar2CreatorRSProcess {
+public:
+  ApplyPar2CreatorRSProcess(Par2Creator* obj, size_t blocklength, u32 inputblock) :
+    _obj(obj), _blocklength(blocklength), _inputblock(inputblock) {}
+  void operator()(const tbb::blocked_range<u32>& r) const {
+    _obj->ProcessDataForOutputIndex(r.begin(), r.end(), _blocklength, _inputblock);
+  }
+private:
+  Par2Creator* _obj;
+  size_t       _blocklength;
+  u32          _inputblock;
+};
+
+#endif
+
+
 // Read source data, process it through the RS matrix and write it to disk.
 bool Par2Creator::ProcessData(u64 blockoffset, size_t blocklength)
 {
@@ -880,6 +1029,8 @@ bool Par2Creator::ProcessData(u64 blockoffset, size_t blocklength)
 
   vector<DataBlock>::iterator sourceblock;
   u32 inputblock;
+
+//CTimeInterval  ti_pdlo("ProcessDataLoopOuter");
 
   DiskFile *lastopenfile = NULL;
 
@@ -917,6 +1068,14 @@ bool Par2Creator::ProcessData(u64 blockoffset, size_t blocklength)
       (*sourcefile)->UpdateHashes(sourceindex, inputbuffer, blocklength);
     }
 
+//CTimeInterval  ti_pdli("ProcessDataLoopInner");
+#if WANT_CONCURRENT
+    if (use_concurrent_processing)
+      tbb::parallel_for(tbb::blocked_range<u32>(0, recoveryblockcount, 1),
+        ::ApplyPar2CreatorRSProcess(this, blocklength, inputblock));
+    else
+      ProcessDataForOutputIndex(0, recoveryblockcount, blocklength, inputblock);
+#else
     // For each output block
     for (u32 outputblock=0; outputblock<recoveryblockcount; outputblock++)
     {
@@ -939,6 +1098,7 @@ bool Par2Creator::ProcessData(u64 blockoffset, size_t blocklength)
         }
       }
     }
+#endif
 
     // Work out which source file the next block belongs to
     if (++sourceindex >= (*sourcefile)->BlockCount())
@@ -953,6 +1113,8 @@ bool Par2Creator::ProcessData(u64 blockoffset, size_t blocklength)
   {
     lastopenfile->Close();
   }
+
+//ti_pdlo.emit();
 
   if (noiselevel > CommandLine::nlQuiet)
     cout << "Writing recovery packets\r";

@@ -16,9 +16,88 @@
 //  You should have received a copy of the GNU General Public License
 //  along with this program; if not, write to the Free Software
 //  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+//
+//  Modifications for concurrent processing Copyright (c) 2007 Vincent Tan.
+//  Search for "#if WANT_CONCURRENT" for concurrent code.
+//  Concurrent processing utilises Intel Thread Building Blocks 2.0,
+//  Copyright (c) 2007 Intel Corp.
 
 #ifndef __PAR2REPAIRER_H__
 #define __PAR2REPAIRER_H__
+
+#if WANT_CONCURRENT
+
+  #include  <ctype.h>
+
+  struct u32_hasher {
+    static  size_t  hash(u32 i) { return static_cast<size_t> (i); }
+    static  bool  equal( u32 x, u32 y ) { return x == y; }
+  };
+
+  struct string_hasher {
+    static  size_t  hash(const std::string& x) {
+      size_t h = 0;
+      for (const char* s = x.c_str(); *s; ++s)
+        h = (h*17)^*s;
+      return h;
+    }
+    static  bool  equal( const std::string& x, const std::string& y ) { return x == y; }
+  };
+
+  struct istring_hasher {
+    static  size_t  hash(const std::string& x) {
+      size_t h = 0;
+      for (const char* s = x.c_str(); *s; ++s)
+        h = (h*17)^ tolower(*s);
+      return h;
+    }
+    static  bool  equal( const std::string& x, const std::string& y )
+    { return x.length() == y.length() && 0 == stricmp(x.c_str(), y.c_str()); }
+  };
+
+  template <typename T>
+  struct atomic_ptr : tbb::atomic<T> {
+    // wow - C++ sometimes really is ugly...
+    T  operator->(void) { return tbb::atomic<T>::operator typename tbb::atomic<T>::value_type(); }
+    atomic_ptr<T>&  operator=(T t) { tbb::atomic<T>::operator=(t); return *this; }
+  };
+
+  class ConcurrentDiskFileMap {
+  public:
+  #if defined(WIN32) || defined(__APPLE_CC__)
+    typedef tbb::concurrent_hash_map<string, DiskFile*, istring_hasher>  map_type;
+  #else
+    typedef tbb::concurrent_hash_map<string, DiskFile*, string_hasher>  map_type;
+  #endif
+    ConcurrentDiskFileMap(void) {}
+    ~ConcurrentDiskFileMap(void) {
+      map_type::iterator fi;
+      for (fi = _diskfilemap.begin(); fi != _diskfilemap.end(); ++fi)
+        delete (*fi).second;
+    }
+
+    bool  Insert(DiskFile *diskfile) {
+      assert(!diskfile->FileName().empty());
+      map_type::accessor  a;
+      (bool) _diskfilemap.insert(a, diskfile->FileName());
+      a->second = diskfile;
+      return true;
+    }
+    void Remove(DiskFile *diskfile) {
+      assert(!diskfile->FileName().empty());
+      (bool) _diskfilemap.erase(diskfile->FileName());
+    }
+    DiskFile* Find(string filename) const {
+      assert(!filename.empty());
+      map_type::const_accessor  a;
+      return _diskfilemap.find(a, filename) ?  a->second : NULL;
+    }
+
+  protected:
+    map_type _diskfilemap;             // Map from filename to DiskFile
+  };
+
+#endif
 
 class Par2Repairer
 {
@@ -31,8 +110,16 @@ public:
 protected:
   // Steps in verifying and repairing files:
 
+#if WANT_CONCURRENT
+public:
+  void VerifyOneSourceFile(Par2RepairerSourceFile *sourcefile, bool& finalresult);
+  void ProcessDataForOutputIndex(u32 outputstartindex, u32 outputendindex, size_t blocklength, u32 inputindex);
+#endif
   // Load packets from the specified file
   bool LoadPacketsFromFile(string filename);
+#if WANT_CONCURRENT
+protected:
+#endif
   // Finish loading a recovery packet
   bool LoadRecoveryPacket(DiskFile *diskfile, u64 offset, PACKET_HEADER &header);
   // Finish loading a file description packet
@@ -127,12 +214,19 @@ protected:
 
   bool                      firstpacket;             // Whether or not a valid packet has been found.
   MD5Hash                   setid;                   // The SetId extracted from the first packet.
+#if WANT_CONCURRENT
+  tbb::concurrent_hash_map<u32, RecoveryPacket*, u32_hasher> recoverypacketmap;       // One recovery packet for each exponent value.
+  ::atomic_ptr<MainPacket*>    mainpacket;           // One copy of the main packet.
+  ::atomic_ptr<CreatorPacket*> creatorpacket;        // One copy of the creator packet.
 
+  ConcurrentDiskFileMap     diskFileMap;
+#else
   map<u32, RecoveryPacket*> recoverypacketmap;       // One recovery packet for each exponent value.
   MainPacket               *mainpacket;              // One copy of the main packet.
   CreatorPacket            *creatorpacket;           // One copy of the creator packet.
 
   DiskFileMap               diskFileMap;
+#endif
 
   map<MD5Hash,Par2RepairerSourceFile*> sourcefilemap;// Map from FileId to SourceFile
   vector<Par2RepairerSourceFile*>      sourcefiles;  // The source files
@@ -169,8 +263,18 @@ protected:
   void                     *inputbuffer;             // Buffer for reading DataBlocks (chunksize)
   void                     *outputbuffer;            // Buffer for writing DataBlocks (chunksize * missingblockcount)
 
+#if WANT_CONCURRENT
+  tbb::atomic<u64>          progress;                // How much data has been processed.
+#else
   u64                       progress;                // How much data has been processed.
+#endif
   u64                       totaldata;               // Total amount of data to be processed.
+
+#if WANT_CONCURRENT
+  bool                      use_concurrent_processing;
+  tbb::mutex                cout_mutex;
+  tbb::atomic<u32>          cout_in_use;             // when repairing, this is used to display % done w/o blocking a thread
+#endif
 };
 
 #endif // __PAR2REPAIRER_H__

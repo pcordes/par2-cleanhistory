@@ -16,6 +16,11 @@
 //  You should have received a copy of the GNU General Public License
 //  along with this program; if not, write to the Free Software
 //  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+//
+//  Modifications for concurrent processing Copyright (c) 2007 Vincent Tan.
+//  Search for "#if WANT_CONCURRENT" for concurrent code.
+//  Concurrent processing utilises Intel Thread Building Blocks 2.0,
+//  Copyright (c) 2007 Intel Corp.
 
 #ifndef __PAR2CREATOR_H__
 #define __PAR2CREATOR_H__
@@ -35,6 +40,13 @@ public:
 
 protected:
   // Steps in the creation process:
+
+#if WANT_CONCURRENT
+public:
+  void ProcessDataForOutputIndex(u32 outputstartindex, u32 outputendindex, size_t blocklength, u32 inputblock);
+  Par2CreatorSourceFile* OpenSourceFile(const CommandLine::ExtraFile &extrafile);
+protected:
+#endif
 
   // Compute block size from block count or vice versa depending on which was
   // specified on the command line
@@ -133,13 +145,23 @@ protected:
 
   ReedSolomon<Galois16> rs;   // The Reed Solomon matrix.
 
+#if WANT_CONCURRENT
+  tbb::atomic<u64>          progress;                // How much data has been processed.
+#else
   u64 progress;     // How much data has been processed.
+#endif
   u64 totaldata;    // Total amount of data to be processed.
 
   bool deferhashcomputation; // If we have enough memory to compute all recovery data
                              // in one pass, then we can defer the computation of
                              // the full file hash and block crc and hashes until
                              // the recovery data is computed.
+
+#if WANT_CONCURRENT
+  bool                      use_concurrent_processing;
+  tbb::mutex                cout_mutex;
+  tbb::atomic<u32>          cout_in_use; // this is used to display % done w/o blocking a thread
+#endif
 };
 
 #endif // __PAR2CREATOR_H__

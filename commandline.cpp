@@ -16,6 +16,11 @@
 //  You should have received a copy of the GNU General Public License
 //  along with this program; if not, write to the Free Software
 //  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+//
+//  Modifications for concurrent processing Copyright (c) 2007 Vincent Tan.
+//  Search for "#if WANT_CONCURRENT" for concurrent code.
+//  Concurrent processing utilises Intel Thread Building Blocks 2.0,
+//  Copyright (c) 2007 Intel Corp.
 
 #include "par2cmdline.h"
 
@@ -72,6 +77,9 @@ CommandLine::CommandLine(void)
 , totalsourcesize(0)
 , largestsourcesize(0)
 , memorylimit(0)
+#if WANT_CONCURRENT
+, useconcurrentprocessing(true) // whether to process everything serially or concurrently
+#endif
 {
 }
 
@@ -101,6 +109,9 @@ void CommandLine::usage(void)
     "  -m<n>  : Memory (in MB) to use\n"
     "  -v [-v]: Be more verbose\n"
     "  -q [-q]: Be more quiet (-q -q gives silence)\n"
+#if WANT_CONCURRENT
+	"  -t<+|->: Threaded processing: -t+ to use multiple cores/CPUs, -t- to use a single core/CPU\n"
+#endif
     "  --     : Treat all remaining CommandLine as filenames\n"
     "\n"
     "If you wish to create par2 files for a single source file, you may leave\n"
@@ -519,6 +530,24 @@ bool CommandLine::Parse(int argc, char *argv[])
           }
           break;
 
+#if WANT_CONCURRENT
+        case 't':
+          {
+            switch (argv[0][2]) {
+            case '-':
+              useconcurrentprocessing = false;
+              break;
+            case '+':
+              useconcurrentprocessing = true;
+              break;
+            default:
+              cerr << "Expected -t+ (use multiple cores) or -t- (use single core)." << endl;
+              return false;
+            }
+          }
+          break;
+#endif
+
         case '-':
           {
             argc--;
@@ -800,7 +829,12 @@ bool CommandLine::Parse(int argc, char *argv[])
     // Half of total physical memory
     memorylimit = (size_t)(TotalPhysicalMemory / 1048576 / 2);
 #else
+  #if WANT_CONCURRENT
+    // Assume 128MB (otherwise processing is slower)
+    memorylimit = 64;
+  #else
     memorylimit = 16;
+  #endif
 #endif
   }
   memorylimit *= 1048576;
