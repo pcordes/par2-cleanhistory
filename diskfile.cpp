@@ -804,8 +804,13 @@ bool DiskFile::FileExists(string filename)
 
 u64 DiskFile::GetFileSize(string filename)
 {
+#ifdef WIN32
+  struct _stati64 st;
+  if ((0 == _stati64(filename.c_str(), &st)) && (0 != (st.st_mode & S_IFREG)))
+#else
   struct stat st;
   if ((0 == stat(filename.c_str(), &st)) && (0 != (st.st_mode & S_IFREG)))
+#endif
   {
     return st.st_size;
   }

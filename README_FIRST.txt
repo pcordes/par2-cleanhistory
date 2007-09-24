@@ -174,8 +174,22 @@ of data and (2) to avoid virtual memory swapping, otherwise the creation or repa
 will become I/O bound instead of CPU bound. Computers with 1 to 2GB of RAM should have
 enough memory to not be I/O bound when creating or repairing parity/data files.
 
+
+--- About this version ---
+
+
+The changes in this version are:
+
+- the original par2cmdline-0.4 sources were not able to process files
+larger than 2GB on the Win32 platform because diskfile.cpp used the
+stat() function which only returns a signed 32-bit number on Win32.
+This was changed to use _stati64() which returns a proper 64-bit file
+size. Note that the FAT32 file system from the Windows 95 era does not
+support files larger than 1 GB so this change is really applicable only
+to files on NTFS disks - the default file system on Windows 2000/XP/Vista.
+
 Vincent Tan.
-August 31, 2007.
+September 24, 2007.
 
 //
 //  Modifications for concurrent processing Copyright (c) 2007 Vincent Tan.
