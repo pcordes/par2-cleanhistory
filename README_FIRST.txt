@@ -19,10 +19,10 @@ http://sourceforge.net/projects/parchive
 This version has been modified to utilise the Intel Thread Building Blocks 2.0
 library, which enables it to process files concurrently instead of the
 original version's serial processing. Computers with more than one CPU or core
-such as those using Intel Core Duo, Intel Pentium D, or AMD Athlon X2 CPUs can
-now create or repair par2 archives much quicker than the original version. For
-example, dual core machines can achieve near-double performance when creating
-or repairing.
+such as those using Intel Core Duo, Intel Core Duo 2, or AMD Athlon X2 CPUs
+can now create or repair par2 archives much quicker than the original version.
+For example, dual core machines can achieve near-double performance when
+creating or repairing.
 
 The Intel Thread Building Blocks 2.0 library is obtained from:
 
@@ -178,7 +178,15 @@ enough memory to not be I/O bound when creating or repairing parity/data files.
 --- About this version ---
 
 
-The changes in this version are:
+The changes in this 20070926 version are:
+
+- fixed an integer overflow bug in Par2CreatorSourceFile.cpp which resulted
+in incorrect MD5 hashes being stored in par2 files when they were created
+from source files that were larger than or equal to 4GB in size. This bug
+affected all 32-bit builds of the program. It did not affect the 64-bit
+builds on those platforms where sizeof(size_t) == 8.
+
+The changes in the 20070924 version are:
 
 - the original par2cmdline-0.4 sources were not able to process files
 larger than 2GB on the Win32 platform because diskfile.cpp used the
@@ -188,8 +196,12 @@ size. Note that the FAT32 file system from the Windows 95 era does not
 support files larger than 1 GB so this change is really applicable only
 to files on NTFS disks - the default file system on Windows 2000/XP/Vista.
 
+The changes in the 20070831 version are:
+
+- modified to utilise Intel TBB 2.0.
+
 Vincent Tan.
-September 24, 2007.
+September 26, 2007.
 
 //
 //  Modifications for concurrent processing Copyright (c) 2007 Vincent Tan.

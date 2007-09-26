@@ -237,7 +237,7 @@ public:
 
   // Continue lookup based on the block hash
   const VerificationHashEntry* Lookup(const VerificationHashEntry *entry,
-                                      const MD5Hash &hash);
+                                      const MD5Hash &hash) const;
 
 protected:
   VerificationHashEntry **hashtable;
@@ -257,7 +257,7 @@ inline const VerificationHashEntry* VerificationHashTable::Lookup(u32 crc) const
 
 // Search for an entry with the specified hash
 inline const VerificationHashEntry* VerificationHashTable::Lookup(const VerificationHashEntry *entry,
-                                                                  const MD5Hash &hash)
+                                                                  const MD5Hash &hash) const
 {
   return VerificationHashEntry::Search(entry, hash);
 }

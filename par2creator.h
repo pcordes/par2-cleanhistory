@@ -133,7 +133,6 @@ protected:
   vector<Par2CreatorSourceFile*> sourcefiles;  // Array containing details of the source files
                                                // as well as the file verification and file
                                                // description packets for them.
-
   vector<DataBlock>          sourceblocks;     // Array with one entry for every source block.
 
   vector<DiskFile>           recoveryfiles;    // Array with one entry for every recovery file.

@@ -319,11 +319,16 @@ void Par2CreatorSourceFile::UpdateHashes(u32 blocknumber, const void *buffer, si
 
 
   // Update the full file hash, but don't go beyond the end of the file
+#if 1 // 20070926 - bugfix for bad MD5 hashes when input file is >= 4GB in size
+  const u64 len = filesize - (u64) blocknumber * (u64) length;
+  if ((u64) length > len)
+    length = (size_t) len; // cast is safe because len must be <= 0xFFFFFFFF
+#else
   if (length > filesize - blocknumber * length)
   {
     length = (size_t)(filesize - blocknumber * (u64)length);
   }
-
+#endif
   assert(contextfull != 0);
 
   contextfull->Update(buffer, length);
@@ -339,4 +344,7 @@ void Par2CreatorSourceFile::FinishHashes(void)
 
   // Store it in the description packet
   descriptionpacket->HashFull(hash);
+#if 0 // 20070926 - used to debug above bug:
+  cout << "final MD5 hash for file '" << diskfilename << "' is " << hash << endl;
+#endif
 }
