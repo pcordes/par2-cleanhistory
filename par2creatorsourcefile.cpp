@@ -141,10 +141,10 @@ bool Par2CreatorSourceFile::Open(CommandLine::NoiseLevel noiselevel, const Comma
     u32        blockcrc = 0;
 
     // Whilst we have not reached the end of the file
-    while (offset < filesize)
+    for (size_t want; offset < filesize; offset += want)
     {
       // Work out how much we can read
-      size_t want = (size_t)min(filesize-offset, (u64)buffersize);
+      want = (size_t)min(filesize-offset, (u64)buffersize);
 
       // Read some data from the file into the buffer
       if (!diskfile->Read(offset, buffer, want))
@@ -217,8 +217,7 @@ bool Par2CreatorSourceFile::Open(CommandLine::NoiseLevel noiselevel, const Comma
       {
         // Display progress
         u32 oldfraction = (u32)(1000 * offset / filesize);
-        offset += want;
-        u32 newfraction = (u32)(1000 * offset / filesize);
+        u32 newfraction = (u32)(1000 * (offset + want) / filesize);
         if (oldfraction != newfraction)
         {
           cout << newfraction/10 << '.' << newfraction%10 << "%\r" << flush;

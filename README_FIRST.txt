@@ -178,7 +178,13 @@ enough memory to not be I/O bound when creating or repairing parity/data files.
 --- About this version ---
 
 
-The changes in this 20070926 version are:
+The changes in this 20070927 version are:
+
+- applied a fix for a bug reported by user 'shenhanc' in 
+Par2CreatorSourceFile.cpp where a loop variable would not get
+incremented when silent output was requested.
+
+The changes in the 20070926 version are:
 
 - fixed an integer overflow bug in Par2CreatorSourceFile.cpp which resulted
 in incorrect MD5 hashes being stored in par2 files when they were created
@@ -201,7 +207,7 @@ The changes in the 20070831 version are:
 - modified to utilise Intel TBB 2.0.
 
 Vincent Tan.
-September 26, 2007.
+September 27, 2007.
 
 //
 //  Modifications for concurrent processing Copyright (c) 2007 Vincent Tan.
