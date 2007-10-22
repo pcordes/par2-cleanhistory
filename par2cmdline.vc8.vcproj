@@ -41,7 +41,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories="..\tbb20_20070815oss_src\include;..\tbb20_20070815oss_src\src"
+				AdditionalIncludeDirectories="..\tbb20_20070927oss_src\include;..\tbb20_20070927oss_src\src"
 				PreprocessorDefinitions="WIN32;_DEBUG;_CONSOLE;PACKAGE=\&quot;par2cmdline\&quot;;VERSION=\&quot;0.4\&quot;"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
@@ -63,7 +63,7 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="..\tbb20_20070815oss_src\ia32\vc8\lib\tbb.lib $(InputDir)\CxxFrameHandler3_to_CxxFrameHandler.obj"
+				AdditionalDependencies="..\tbb20_20070927oss_src\ia32\vc8\lib\tbb.lib"
 				OutputFile="$(OutDir)/par2.exe"
 				LinkIncremental="2"
 				GenerateDebugInformation="true"
@@ -125,7 +125,7 @@
 				InlineFunctionExpansion="2"
 				FavorSizeOrSpeed="1"
 				OmitFramePointers="true"
-				AdditionalIncludeDirectories="..\tbb20_20070815oss_src\include;..\tbb20_20070815oss_src\src"
+				AdditionalIncludeDirectories="..\tbb20_20070927oss_src\include;..\tbb20_20070927oss_src\src"
 				PreprocessorDefinitions="WIN32;NDEBUG;_CONSOLE;PACKAGE=\&quot;par2cmdline\&quot;;VERSION=\&quot;0.4\&quot;"
 				StringPooling="true"
 				RuntimeLibrary="2"
@@ -147,7 +147,7 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="..\tbb20_20070815oss_src\ia32\vc8\lib\tbb.lib $(InputDir)\CxxFrameHandler3_to_CxxFrameHandler.obj"
+				AdditionalDependencies="..\tbb20_20070927oss_src\ia32\vc8\lib\tbb.lib"
 				OutputFile="$(OutDir)/par2.exe"
 				LinkIncremental="1"
 				GenerateDebugInformation="true"

@@ -63,7 +63,7 @@ int main(int argc, char *argv[])
 #endif
 
   // Parse the command line
-  CommandLine *commandline = new CommandLine;
+  std::auto_ptr<CommandLine> commandline(new CommandLine);
 
   Result result = eInvalidCommandLineArguments;
   
@@ -141,8 +141,6 @@ int main(int argc, char *argv[])
       break;
     }
   }
-
-  delete commandline;
 
   return result;
 }

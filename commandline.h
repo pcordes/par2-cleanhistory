@@ -31,8 +31,13 @@
 
 class CommandLine
 {
+  static CommandLine* sInstance;
+
 public:
+  static CommandLine* get(void);
+
   CommandLine(void);
+  ~CommandLine(void);
 
   // Parse the supplied command line arguments. 
   bool Parse(int argc, char *argv[]);
@@ -109,6 +114,9 @@ public:
   u64                    GetTotalSourceSize(void) const    {return totalsourcesize;}
   CommandLine::NoiseLevel GetNoiseLevel(void) const        {return noiselevel;}
 
+  // 2007/10/21 for hierarchial support:
+  const string&          GetBaseDirectory(void) const      {return base_directory;}
+
 #if WANT_CONCURRENT
   bool                   UseConcurrentProcessing(void) const { return useconcurrentprocessing; }
 #endif
@@ -159,6 +167,13 @@ protected:
   size_t memorylimit;          // How much memory is permitted to be used
                                // for the output buffer when creating
                                // or repairing.
+
+  // 2007/10/21 - added this to support hierarchial repair (eg, to protect a
+  // hierarchy of folders of jpg files)
+
+  // if non-empty then this is the base directory for paths stored in par2
+  // files to support hierarchial repair
+  string base_directory;
 
 #if WANT_CONCURRENT
   // although it is possible to specify how many threads that TBB should

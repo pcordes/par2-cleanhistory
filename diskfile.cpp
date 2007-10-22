@@ -796,28 +796,48 @@ void DiskFile::SplitFilename(string filename, string &path, string &name)
   }
 }
 
+#define SUPPORT_BLOCK_DEVICES 0
+
+#if SUPPORT_BLOCK_DEVICES
+  #include <sys/ioctl.h>
+  #include <sys/mount.h>
+#endif
+
 bool DiskFile::FileExists(string filename)
 {
   struct stat st;
+#if SUPPORT_BLOCK_DEVICES
+  return ((0 == stat(filename.c_str(), &st)) &&
+          (0 != (st.st_mode & (S_IFREG|S_IFBLK))));
+#else
   return ((0 == stat(filename.c_str(), &st)) && (0 != (st.st_mode & S_IFREG)));
+#endif
 }
 
 u64 DiskFile::GetFileSize(string filename)
 {
-#ifdef WIN32
-  struct _stati64 st;
-  if ((0 == _stati64(filename.c_str(), &st)) && (0 != (st.st_mode & S_IFREG)))
-#else
   struct stat st;
-  if ((0 == stat(filename.c_str(), &st)) && (0 != (st.st_mode & S_IFREG)))
+  if (0 == stat(filename.c_str(), &st)) {
+    if (st.st_mode & S_IFREG)
+    {
+      return st.st_size;
+    }
+#if SUPPORT_BLOCK_DEVICES
+    else if (st.st_mode & S_IFBLK)
+    {
+      FILE *fp;
+      u64 size = 0;
+      if ( NULL != (fp = fopen(filename.c_str(), "rb")) )
+      {
+        ioctl(fileno(fp), BLKGETSIZE64, &size);
+        fclose(fp);
+      }
+      return size;
+    }
 #endif
-  {
-    return st.st_size;
   }
-  else
-  {
-    return 0;
-  }
+
+  return 0;
 }
 
 
@@ -843,14 +863,20 @@ string DiskFile::TranslateFilename(string filename)
     {
       switch (ch)
       {
+      case '/':
+      case '\\': {
+        CommandLine* cl = CommandLine::get();
+        if (cl && !cl->GetBaseDirectory().empty()) {
+          ch = '\\'; // if '/' was stored in the par2 file, change it to '\\'
+          break;
+        }
+      }
       case '"':
       case '*':
-      case '/':
       case ':':
       case '<':
       case '>':
       case '?':
-      case '\\':
       case '|':
         ok = false;
       }
@@ -860,13 +886,13 @@ string DiskFile::TranslateFilename(string filename)
     {
       ok = false;
     }
-    else
+    else if ('/' == ch || '\\' == ch)
     {
-      switch (ch)
-      {
-      case '/':
+      CommandLine* cl = CommandLine::get();
+      if (cl && !cl->GetBaseDirectory().empty())
+        ch = '/'; // if '\\' was stored in the par2 file, change it to '/'
+	  else
         ok = false;
-      }
     }
 #endif
 

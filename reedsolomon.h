@@ -65,6 +65,9 @@ public:
                u32 outputindex,         // The row in the RS matrix
                void *outputbuffer);     // Buffer containing output data
 
+private:
+  bool InternalProcess(const g &factor, size_t size, const void *inputbuffer, void *outputbuffer);	// Optimization
+
 protected:
   // Perform Gaussian Elimination
   bool GaussElim(CommandLine::NoiseLevel noiselevel,
@@ -144,6 +147,20 @@ inline ReedSolomon<g>::~ReedSolomon(void)
 #ifdef LONGMULTIPLY
   delete glmt;
 #endif
+}
+
+template<class g>
+inline bool ReedSolomon<g>::Process(size_t size, u32 inputindex, const void *inputbuffer, u32 outputindex, void *outputbuffer)
+{
+	// Optimization: it occurs frequently the function exits early on, so inline the start.
+	// This resulted in a speed gain of approx. 8% in repairing.
+
+	// Look up the appropriate element in the RS matrix
+	g factor = leftmatrix[outputindex * (datapresent + datamissing) + inputindex];
+	// Do nothing if the factor happens to be 0
+	if (factor == 0)
+		return eSuccess;
+	return this->InternalProcess (factor, size, inputbuffer, outputbuffer);
 }
 
 u32 gcd(u32 a, u32 b);

@@ -50,7 +50,11 @@ Par2CreatorSourceFile::~Par2CreatorSourceFile(void)
 // 16k of the file, and then compute the FileId and store the results
 // in a file description packet and a file verification packet.
 
-bool Par2CreatorSourceFile::Open(CommandLine::NoiseLevel noiselevel, const CommandLine::ExtraFile &extrafile, u64 blocksize, bool deferhashcomputation)
+bool Par2CreatorSourceFile::Open(CommandLine::NoiseLevel noiselevel, const CommandLine::ExtraFile &extrafile, u64 blocksize, bool deferhashcomputation
+#if WANT_CONCURRENT
+  , tbb::mutex& cout_mutex
+#endif
+  )
 {
   // Get the filename and filesize
   diskfilename = extrafile.FileName();
@@ -58,17 +62,37 @@ bool Par2CreatorSourceFile::Open(CommandLine::NoiseLevel noiselevel, const Comma
 
   // Work out how many blocks the file will be sliced into
   blockcount = (u32)((filesize + blocksize-1) / blocksize);
-  
+
   // Determine what filename to record in the PAR2 files
-  string::size_type where;
-  if (string::npos != (where = diskfilename.find_last_of('\\')) ||
-      string::npos != (where = diskfilename.find_last_of('/')))
-  {
-    parfilename = diskfilename.substr(where+1);
-  }
-  else
-  {
-    parfilename = diskfilename;
+  CommandLine* cl = CommandLine::get();
+  if (!cl)
+    return false; // something is wrong
+
+  const string& bd = cl->GetBaseDirectory();
+  if (bd.empty()) {
+    string::size_type where;
+    if (string::npos != (where = diskfilename.find_last_of('\\')) ||
+        string::npos != (where = diskfilename.find_last_of('/')))
+    {
+      parfilename = diskfilename.substr(where+1);
+    }
+    else
+    {
+      parfilename = diskfilename;
+    }
+  } else {
+    string s(DiskFile::GetCanonicalPathname(diskfilename));
+#if defined(WIN32) || defined(__APPLE_CC__)
+    if (0 != stricmp(s.substr(0, bd.length()).c_str(), bd.c_str()))
+      return false;
+#else
+    if (s.substr(0, bd.length()) != bd)
+      return false;
+#endif
+    s.erase(0, bd.length()); // remove base_dir -> sub-path
+    if (s.empty())
+      return false; // a file name is needed
+    parfilename = s;
   }
 
   // Create the Description and Verification packets
@@ -220,6 +244,9 @@ bool Par2CreatorSourceFile::Open(CommandLine::NoiseLevel noiselevel, const Comma
         u32 newfraction = (u32)(1000 * (offset + want) / filesize);
         if (oldfraction != newfraction)
         {
+#if WANT_CONCURRENT
+          tbb::mutex::scoped_lock l(cout_mutex);
+#endif
           cout << newfraction/10 << '.' << newfraction%10 << "%\r" << flush;
         }
       }

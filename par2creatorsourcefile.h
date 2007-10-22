@@ -39,7 +39,11 @@ public:
   ~Par2CreatorSourceFile(void);
 
   // Open the source file and compute the Hashes and CRCs.
-  bool Open(CommandLine::NoiseLevel noiselevel, const CommandLine::ExtraFile &extrafile, u64 blocksize, bool deferhashcomputation);
+  bool Open(CommandLine::NoiseLevel noiselevel, const CommandLine::ExtraFile &extrafile, u64 blocksize, bool deferhashcomputation
+#if WANT_CONCURRENT
+            , tbb::mutex& cout_mutex
+#endif
+	       );
   void Close(void);
 
   // Recover the file description and file verification packets

@@ -32,6 +32,98 @@ static char THIS_FILE[]=__FILE__;
 #endif
 #endif
 
+#ifdef WIN32
+  enum { OS_SEPARATOR = '\\', OTHER_OS_SEPARATOR = '/' };
+#else
+  enum { OS_SEPARATOR = '/', OTHER_OS_SEPARATOR = '\\' };
+  #include <dirent.h>
+#endif
+
+
+extern bool is_existing_folder(const string& dir);
+
+bool
+is_existing_folder(const string& dir)
+{
+  struct stat st;
+  if (stat(dir.c_str(), &st))
+    return false;
+
+  return (st.st_mode & S_IFDIR) != 0;
+}
+
+static
+void
+build_file_list_in_imp(string dir, list<string>* l)
+{
+#if WIN32
+  dir += OS_SEPARATOR;
+  dir += '*';
+
+  WIN32_FIND_DATA fd;
+  HANDLE h = ::FindFirstFile(dir.c_str(), &fd);
+  dir.erase(dir.length()-1);
+  if (h == INVALID_HANDLE_VALUE)
+    return;
+
+  do {
+    if (0 == strcmp(fd.cFileName, ".") || 0 == strcmp(fd.cFileName, ".."))
+      continue;
+    if (fd.cFileName[0] == '.' ||
+        (FILE_ATTRIBUTE_HIDDEN & fd.dwFileAttributes)) // ignore invisible files/folders
+      continue;
+
+    if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+      build_file_list_in_imp(dir + fd.cFileName, l);
+	else
+      l->push_back(dir + fd.cFileName);
+  } while (::FindNextFile(h, &fd));
+  ::FindClose(h);
+#else
+  DIR *dirp = opendir(dir.c_str());
+  if (dirp == 0)
+    return;
+
+  dir += OS_SEPARATOR;
+
+  struct dirent *d;
+  while ((d = readdir(dirp)) != 0) {
+    string name = d->d_name;
+
+    if (name == "." || name == "..")
+      continue;
+    if (name[0] == '.') // ignore invisible files/folders
+      continue;
+
+    if (d->d_type == DT_DIR)
+      build_file_list_in_imp(dir + name, l);
+    else
+      l->push_back(dir + name);
+  }
+  closedir(dirp);
+#endif
+}
+
+static
+list<string>*
+build_file_list_in(const char* dir)
+{
+  std::auto_ptr< list<string> > res(new list<string>);
+  if (!res.get())
+    return NULL;
+
+  string s(dir);
+  if (s.empty())
+    return NULL;
+
+  size_t i = s.length()-1;
+  char c = s[i];
+  if (OTHER_OS_SEPARATOR == c || OS_SEPARATOR == c)
+    s.erase(i);
+  build_file_list_in_imp(s, res.get());
+  return res.release();
+}
+
 CommandLine::ExtraFile::ExtraFile(void)
 : filename()
 , filesize(0)
@@ -59,6 +151,16 @@ CommandLine::ExtraFile::ExtraFile(const string &name, u64 size)
 }
 
 
+/* static */ CommandLine* CommandLine::sInstance = NULL;
+
+// static
+CommandLine*
+CommandLine::get(void)
+{
+  return sInstance;
+}
+
+
 CommandLine::CommandLine(void)
 : operation(opNone)
 , version(verUnknown)
@@ -81,6 +183,12 @@ CommandLine::CommandLine(void)
 , useconcurrentprocessing(true) // whether to process everything serially or concurrently
 #endif
 {
+  sInstance = this;
+}
+
+CommandLine::~CommandLine(void)
+{
+  sInstance = NULL;
 }
 
 void CommandLine::usage(void)
@@ -112,6 +220,8 @@ void CommandLine::usage(void)
 #if WANT_CONCURRENT
 	"  -t<+|->: Threaded processing: -t+ to use multiple cores/CPUs, -t- to use a single core/CPU\n"
 #endif
+	// 2007/10/21
+	"  -d<dir>: root directory for paths to be put in par2 files OR root directory for files to repair from par2 files\n"
     "  --     : Treat all remaining CommandLine as filenames\n"
     "\n"
     "If you wish to create par2 files for a single source file, you may leave\n"
@@ -530,6 +640,20 @@ bool CommandLine::Parse(int argc, char *argv[])
           }
           break;
 
+        case 'd': {
+          base_directory = DiskFile::GetCanonicalPathname(2 + argv[0]);
+          if (base_directory.empty()) {
+			cerr << "base directory for hierarchy support must specify a folder" << endl;
+			return false;
+          } else if (operation == opCreate && !is_existing_folder(base_directory)) {
+			cerr << "the base directory (" << base_directory << ") for hierarchy support must specify an accessible and existing folder" << endl;
+			return false;
+          }
+          if (base_directory[base_directory.length()-1] != OS_SEPARATOR)
+            base_directory += OS_SEPARATOR;
+          break;
+        }
+
 #if WANT_CONCURRENT
         case 't':
           {
@@ -576,15 +700,14 @@ bool CommandLine::Parse(int argc, char *argv[])
           DiskFile::SplitFilename(argv[0], path, name);
 
           filenames = DiskFile::FindFiles(path, name);
-        }
-        else
-        {
+        } else if (is_existing_folder(argv[0])) {
+          filenames = build_file_list_in(argv[0]);
+        } else {
           filenames = new list<string>;
           filenames->push_back(argv[0]);
         }
 
-        list<string>::iterator fn = filenames->begin();
-        while (fn != filenames->end())
+        for (list<string>::iterator fn = filenames->begin(); fn != filenames->end(); ++fn)
         {
           // Convert filename from command line into a full path + filename
           string filename = DiskFile::GetCanonicalPathname(*fn);
@@ -671,34 +794,34 @@ bool CommandLine::Parse(int argc, char *argv[])
           }
           else
           {
-            // All other files must exist
+            // Originally, all specified files were supposed to exist, or the program
+            // would stop with an error message. This was not practical, for example in
+            // a directory with files appearing and disappearing (an active download directory).
+            // So the new rule is: when a specified file doesn't exist, it is silently skipped.
             if (!DiskFile::FileExists(filename))
             {
-              cerr << "The source file does not exist: " << filename << endl;
-              return false;
+              cout << "Ignoring non-existent source file: " << filename << endl;
+            } else {
+              u64 filesize = DiskFile::GetFileSize(filename);
+
+              // Ignore all 0 byte files
+              if (filesize > 0)
+              {
+                extrafiles.push_back(ExtraFile(filename, filesize));
+
+                // track the total size of the source files and how
+                // big the largest one is.
+                totalsourcesize += filesize;
+                if (largestsourcesize < filesize)
+                  largestsourcesize = filesize;
+              }
+              else
+              {
+                cout << "Skipping 0 byte file: " << filename << endl;
+              }
             }
-
-            u64 filesize = DiskFile::GetFileSize(filename);
-
-            // Ignore all 0 byte files
-            if (filesize > 0)
-            {
-              extrafiles.push_back(ExtraFile(filename, filesize));
-
-              // track the total size of the source files and how
-              // big the largest one is.
-              totalsourcesize += filesize;
-              if (largestsourcesize < filesize)
-                largestsourcesize = filesize;
-            }
-            else
-            {
-              cout << "Skipping 0 byte file: " << filename << endl;
-            }
-          }
-
-          ++fn;
-        }
+          } // if
+        } // for
         delete filenames;
       }
     }

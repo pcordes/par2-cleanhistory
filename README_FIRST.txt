@@ -50,7 +50,12 @@ them however, you may need to modify the configure scripts as detailed below.
 
 Because this version depends on the Intel Thread Building Blocks 2.0 library, you
 will need to tell the build system where the headers and libraries are in order to
-compile and link the program. In `Makefile.in', go to line 73:
+compile and link the program. There are 2 ways to do this: use the tbbvars.sh
+script included in TBB to add the appropriate environment variables, or manually
+modify the Makefile to use the appropriate paths. The tbbvars.sh file is in
+the tbb<version>oss_src/build directory. To manually modify the Makefile:
+
+ In `Makefile.in', go to line 73:
 
 DEFAULT_INCLUDES = -I. -I$(srcdir) -I. -l../tbb20_20070815oss_src/include
 
@@ -64,6 +69,10 @@ LDADD = -lstdc++ -ltbb
 has already had the tbb library added to the list of libraries to link against.
 You will need to have libtbb.a (or libtbb.dylib or libtbb.so etc.) in your
 library path (usually /usr/lib).
+
+The Mac OS X distribution of this project is not built using either or the
+above techniques; instead, it uses a relative-path for the dynamic library.
+Please see the README_FIRST.txt in the Mac OS X distribution for more information.
 
 
 --- Building and installing on Windows operating systems ---
@@ -80,6 +89,13 @@ you extracted the Intel TBB files is correct. Similarly for the linker paths.
 To run the built binary, make sure the Intel TBB dynamic link library is in
 the library path - typically the tbb.dll file will be placed in either
 %WINDIR%\System32 or in the directory that the par2.exe file is in.
+
+The Windows distribution of this project is built with Visual C++ 2005 Express
+Edition but the executable is linked against the Visual Studio .NET 2003's C
+runtime library to avoid having to distribute the Visual C++ 2005's C runtime
+library. Please see the README_FIRST.txt in the Windows distribution for more
+information.
+
 
 
 --- Technical Details ---
@@ -178,7 +194,87 @@ enough memory to not be I/O bound when creating or repairing parity/data files.
 --- About this version ---
 
 
-The changes in this 20070927 version are:
+The changes in the 20071022 version are:
+
+- synchronised the sources with the version of par2cmdline in the CVS at <http://sourceforge.net/projects/parchive>
+- built against the 20070927 version of the Intel TBB
+- tweaked the inner loop of the Reed Solomon code so that the compiler
+  will produce faster/better/smaller code (which may or may not speed up
+  the program).
+- added support for creating and repairing data files in directory trees
+  via the new -d<directory> command line switch.
+
+  The original modifications for this were done by Pacer:
+
+<http://www.quickpar.co.uk/forum/viewtopic.php4?t=460&amp;start=0&amp;postdays=0&amp;postorder=asc&amp;highlight=&amp>
+
+  This version defaults to the original behaviour of par2cmdline: if no
+  -d switch is provided then the data files are expected to be in the same
+  directory that the .par2 files are in.
+
+  Providing a -d switch will change the way that par2cmdline behaves as follows.
+  For par2 creation, any file inside the provided <directory> will have
+  its sub-path stored in the par2 files. For par2 repair, files for
+  verification/repair will be searched for inside the provided <directory>.
+
+  Example:
+
+    in /users/home/vincent/pictures/ there is
+       2007_01_vacation_fiji
+         01.jpg
+         02.jpg
+         03.jpg
+         04.jpg
+       2007_03_business_trip_usa
+         01.jpg
+         02.jpg
+       2007_06_wedding
+         01.jpg
+         02.jpg
+         03.jpg
+         04.jpg
+         05.jpg
+         06.jpg
+
+    Using the command:
+
+./par2 c -d/users/home/vincent/pictures/ /users/home/vincent/pictures.par2 /users/home/vincent/pictures
+
+    will create par2 files in /users/home/vincent containing sub-paths such as:
+
+      2007_01_vacation_fiji/01.jpg
+      2007_01_vacation_fiji/02.jpg
+      2007_01_vacation_fiji/03.jpg
+      2007_01_vacation_fiji/04.jpg
+      2007_03_business_trip_usa/01.jpg
+      2007_03_business_trip_usa/02.jpg
+      2007_06_wedding/01.jpg
+      etc. etc.
+
+    If you later try to repair the files which are now in /users/home/joe/pictures,
+    you would use the command:
+
+      ./par2 r -d/users/home/joe/pictures/ /users/home/joe/pictures.par2
+
+    The par2 file could be anywhere on your disk: as long as the -d<directory>
+    switch specifies the root of the files, the verification/repair will occur correctly.
+
+    Notes:
+
+    [1] the directory given to -d does not need to have a trailing '/' character.
+    [2] on Windows, either / or \ can be used.
+    [3] partial paths can be used. For example, if the current directory is
+        /users/home/vincent, then this be used instead of the above command:
+
+        ./par2 c -dpictures pictures.par2 pictures
+
+    [4] if a directory has spaces or other characters that need escaping from the
+        shell then the use of double quotes is recommended. For example:
+
+        ./par2 c "-dpicture collection" "picture collection.par2" "picture collection"
+
+
+The changes in the 20070927 version are:
 
 - applied a fix for a bug reported by user 'shenhanc' in 
 Par2CreatorSourceFile.cpp where a loop variable would not get
@@ -207,7 +303,7 @@ The changes in the 20070831 version are:
 - modified to utilise Intel TBB 2.0.
 
 Vincent Tan.
-September 27, 2007.
+October 22, 2007.
 
 //
 //  Modifications for concurrent processing Copyright (c) 2007 Vincent Tan.

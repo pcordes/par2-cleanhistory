@@ -43,7 +43,7 @@
 #include <assert.h>
 
 #define snprintf _snprintf
-#define stat _stat
+#define stat _stati64 /* _stat64 */ /* so that files >= 4GB can be processed, was: #define stat _stat */
 
 #define __LITTLE_ENDIAN 1234
 #define __BIG_ENDIAN    4321

@@ -504,23 +504,24 @@ bool Par2Creator::ComputeRecoveryFileCount(void)
 
 Par2CreatorSourceFile* Par2Creator::OpenSourceFile(const CommandLine::ExtraFile &extrafile)
 {
-    Par2CreatorSourceFile *sourcefile = new Par2CreatorSourceFile;
-
-    string path;
-    string name;
-    DiskFile::SplitFilename(extrafile.FileName(), path, name);
+    std::auto_ptr<Par2CreatorSourceFile> sourcefile(new Par2CreatorSourceFile);
 
     if (noiselevel > CommandLine::nlSilent) {
+    //string path;
+    //string name;
+    //DiskFile::SplitFilename(extrafile.FileName(), path, name);
+
       tbb::mutex::scoped_lock l(cout_mutex);
-      cout << "Opening: " << name << endl;
+      cout << "Opening: " << extrafile.FileName() /* name */ << endl;
     }
 
     // Open the source file and compute its Hashes and CRCs.
-    if (!sourcefile->Open(noiselevel, extrafile, blocksize, deferhashcomputation))
-    {
-      delete sourcefile;
+    if (!sourcefile->Open(noiselevel, extrafile, blocksize, deferhashcomputation
+#if WANT_CONCURRENT
+                          , cout_mutex
+#endif
+		))
       return false;
-    }
 
     // Record the file verification and file description packets
     // in the critical packet list.
@@ -532,7 +533,7 @@ Par2CreatorSourceFile* Par2Creator::OpenSourceFile(const CommandLine::ExtraFile 
     // Close the source file until its needed
     sourcefile->Close();
 
-    return sourcefile;
+    return sourcefile.release();
 }
 
 class ApplyOpenSourceFile {
@@ -582,7 +583,7 @@ bool Par2Creator::OpenSourceFiles(const list<CommandLine::ExtraFile> &extrafiles
   } else for (ExtraFileIterator extrafile = extrafiles.begin(); extrafile != extrafiles.end(); ++extrafile) {
     Par2CreatorSourceFile* sourcefile = OpenSourceFile(*extrafile);
     if (!sourcefile)
-      return false; // error
+      return false;
     sourcefiles.push_back(sourcefile);
   }
 #else

@@ -1278,12 +1278,12 @@ void Par2Repairer::VerifyOneSourceFile(Par2RepairerSourceFile *sourcefile, bool&
 
       if (noiselevel > CommandLine::nlSilent)
       {
-        string path;
-        string name;
-        DiskFile::SplitFilename(filename, path, name);
+      //string path;
+      //string name;
+      //DiskFile::SplitFilename(filename, path, name);
 
         tbb::mutex::scoped_lock l(cout_mutex);
-        cout << "Target: \"" << name << "\" - missing." << endl;
+        cout << "Target: \"" << filename /* name */ << "\" - missing." << endl;
       }
     }
   }
@@ -1651,17 +1651,28 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
 
   matchtype = eNoMatch;
 
+//string path;
+//string name;
+//DiskFile::SplitFilename(diskfile->FileName(), path, name);
+
   // Is the file empty
   if (diskfile->FileSize() == 0)
   {
     // If the file is empty, then just return
+    if (noiselevel > CommandLine::nlSilent)
+    {
+      if (originalsourcefile != 0)
+      {
+        cout << "Target: \"" << diskfile->FileName() /* name */ << "\" - empty." << endl;
+      }
+      else
+      {
+        cout << "File: \"" << diskfile->FileName() /* name */ << "\" - empty." << endl;
+      }
+    }
     return true;
   }
-
-  string path;
-  string name;
-  DiskFile::SplitFilename(diskfile->FileName(), path, name);
-
+/*
   string shortname;
   if (name.size() > 56)
   {
@@ -1671,7 +1682,7 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
   {
     shortname = name;
   }
-
+ */
   // Create the checksummer for the file and start reading from it
   FileCheckSummer filechecksummer(diskfile, blocksize, windowtable, windowmask);
   if (!filechecksummer.Start())
@@ -1707,7 +1718,7 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
 #if WANT_CONCURRENT
         tbb::mutex::scoped_lock l(cout_mutex);
 #endif
-        cout << "Scanning: \"" << shortname << "\": " << newfraction/10 << '.' << newfraction%10 << "%\r" << flush;
+        cout << "Scanning: \"" << diskfile->FileName() /* shortname */ << "\": " << newfraction/10 << '.' << newfraction%10 << "%\r" << flush;
       }
     }
 
@@ -1826,7 +1837,7 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
           if (originalsourcefile != 0)
           {
             cout << "Target: \"" 
-                 << name 
+                 << diskfile->FileName() // name
                  << "\" - damaged, found " 
                  << count 
                  << " data blocks from several target files." 
@@ -1835,7 +1846,7 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
           else
           {
             cout << "File: \"" 
-                 << name 
+                 << diskfile->FileName() // name
                  << "\" - found " 
                  << count 
                  << " data blocks from several target files." 
@@ -1848,7 +1859,7 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
           if (originalsourcefile == sourcefile)
           {
             cout << "Target: \"" 
-                 << name 
+                 << diskfile->FileName() // name
                  << "\" - damaged. Found " 
                  << count 
                  << " of " 
@@ -1859,11 +1870,11 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
           // Were we scanning the target file or an extra file
           else if (originalsourcefile != 0)
           {
-            string targetname;
+            string path, targetname;
             DiskFile::SplitFilename(sourcefile->TargetFileName(), path, targetname);
 
             cout << "Target: \"" 
-                 << name 
+                 << diskfile->FileName() // name
                  << "\" - damaged. Found " 
                  << count 
                  << " of " 
@@ -1875,11 +1886,11 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
           }
           else
           {
-            string targetname;
+            string path, targetname;
             DiskFile::SplitFilename(sourcefile->TargetFileName(), path, targetname);
 
             cout << "File: \"" 
-                 << name 
+                 << diskfile->FileName() // name
                  << "\" - found " 
                  << count 
                  << " of " 
@@ -1903,16 +1914,16 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
         // Did we match the target file
         if (originalsourcefile == sourcefile)
         {
-          cout << "Target: \"" << name << "\" - found." << endl;
+          cout << "Target: \"" << diskfile->FileName() /* name */ << "\" - found." << endl;
         }
         // Were we scanning the target file or an extra file
         else if (originalsourcefile != 0)
         {
-          string targetname;
+          string path, targetname;
           DiskFile::SplitFilename(sourcefile->TargetFileName(), path, targetname);
 
           cout << "Target: \"" 
-               << name 
+               << diskfile->FileName() // name
                << "\" - is a match for \"" 
                << targetname 
                << "\"." 
@@ -1920,11 +1931,11 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
         }
         else
         {
-          string targetname;
+          string path, targetname;
           DiskFile::SplitFilename(sourcefile->TargetFileName(), path, targetname);
 
           cout << "File: \"" 
-               << name 
+               << diskfile->FileName() // name
                << "\" - is a match for \"" 
                << targetname 
                << "\"." 
@@ -1948,7 +1959,7 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
       if (duplicatecount > 0)
       {
         cout << "File: \""
-             << name
+             << diskfile->FileName() // name
              << "\" - found " 
              << duplicatecount
              << " duplicate data blocks."
@@ -1957,7 +1968,7 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
       else
       {
         cout << "File: \"" 
-             << name 
+             << diskfile->FileName() // name
              << "\" - no data found." 
              << endl;
       }

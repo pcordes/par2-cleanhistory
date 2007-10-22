@@ -19,6 +19,15 @@
 
 #include "par2cmdline.h"
 
+#ifdef WIN32
+  #include <direct.h> // for mkdir
+  enum { OS_SEPARATOR = '\\' };
+#else
+  #include <sys/types.h>
+  #include <sys/stat.h> // for mkdir
+  enum { OS_SEPARATOR = '/' };
+#endif
+
 #ifdef _MSC_VER
 #ifdef _DEBUG
 #undef THIS_FILE
@@ -26,6 +35,27 @@ static char THIS_FILE[]=__FILE__;
 #define new DEBUG_NEW
 #endif
 #endif
+
+extern bool is_existing_folder(const string& dir);
+
+static
+bool
+create_path(const string& path)
+{
+  string::size_type where = path.find_last_of(OS_SEPARATOR);
+  if (string::npos == where)
+    return false; // something is wrong
+
+  string s(path.substr(0, where));
+  if (!is_existing_folder(s) && !create_path(s))
+    return false;
+
+#ifdef WIN32
+  return 0 == mkdir(path.c_str());
+#else
+  return 0 == mkdir(path.c_str(), 0000755);
+#endif
+}
 
 Par2RepairerSourceFile::Par2RepairerSourceFile(DescriptionPacket *_descriptionpacket,
                                                VerificationPacket *_verificationpacket)
@@ -61,24 +91,38 @@ void Par2RepairerSourceFile::SetVerificationPacket(VerificationPacket *_verifica
   verificationpacket = _verificationpacket;
 }
 
-void Par2RepairerSourceFile::ComputeTargetFileName(string path)
+void Par2RepairerSourceFile::ComputeTargetFileName(string path) // path is the directory of the par2 file
 {
   // Get a version of the filename compatible with the OS
   string filename = DiskFile::TranslateFilename(descriptionpacket->FileName());
 
-  // Strip the path from the filename
-  string::size_type where;
-  if (string::npos != (where = filename.find_last_of('\\'))
-      || string::npos != (where = filename.find_last_of('/'))
-#ifdef WIN32
-      || string::npos != (where = filename.find_last_of(':'))
-#endif
-     )
-  {
-    filename = filename.substr(where+1);
-  }
+  CommandLine* cl = CommandLine::get();
+  if (!cl)
+    return; // something is wrong
 
-  targetfilename = path + filename;
+  string::size_type where;
+  const string& bd = cl->GetBaseDirectory();
+  if (bd.empty()) {
+    // Strip the path from the filename
+    if (string::npos != (where = filename.find_last_of(OS_SEPARATOR)))
+      filename = filename.substr(where+1);
+
+    targetfilename = path + filename;
+  } else {
+    filename = bd + filename; // always use base_directory
+
+    where = filename.find_last_of(OS_SEPARATOR);
+    if (string::npos == where)
+      return; // something is wrong
+
+    targetfilename = filename;
+    filename.erase(where); // remove OS_SEPARATOR+filename
+
+    // ensure that the directory where the file is supposed to be exists;
+    // create it if it does not exist
+    if (!is_existing_folder(filename))
+      (bool) create_path(filename);
+  }
 }
 
 string Par2RepairerSourceFile::TargetFileName(void) const
