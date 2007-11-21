@@ -291,6 +291,155 @@ using namespace std;
     tbb::tick_count _start;
     bool            _done;
   };
+
+  #define WANT_PARALLEL_WHILE 1
+  // using parallel_for() causes disk thrashing because it partitions
+  // the files into large groups, each of which is iterated over by one
+  // thread. For example, 100 files on a 2 CPU machine would be processed
+  // in a manner like this:
+  //
+  // thread #1: file 1, file 2, file 3, ..., file 50
+  // thread #2: file 51, file 52, file 53, ..., file 100
+  //
+  // using parallel_while allows the threads to iterate over the files
+  // in sequential order; in effect, a FIFO queue is being implemented.
+
+  #include "tbb/parallel_while.h"
+  #include "../src/tbb/tbb_misc.h" // for tbb::DetectNumberOfWorkers(); it's a pity that tbb_misc.h is not in <tbb_home>/include/tbb/
+
+  // === begin generic classes for use with parallel_while() ===
+
+  template <typename ITEM>
+  class item_stream {
+    ITEM _item;
+  public:
+    bool pop_if_present( ITEM& item ) {
+      if ( _item ) {
+        item = _item;
+        _item = get_next_item(_item);
+        return true;
+      } else {
+        return false;
+      }
+    }
+
+    item_stream(ITEM root_item) : _item(root_item) {}
+  };
+
+  template <typename BODY>
+  class incrementing_parallel_while : public tbb::parallel_while<BODY> {
+    tbb::atomic<size_t> _nexti;
+  public:
+    incrementing_parallel_while(size_t start_i = 0) { _nexti = start_i; }
+    size_t get_next_i(void) const { return _nexti; }
+
+    std::pair<bool, size_t> increment_next_i_up_to(size_t max_i) {
+      size_t i = 1 + _nexti.fetch_and_increment();
+      if (i < max_i)
+        return std::pair<bool, size_t>(true, i);
+
+      _nexti.fetch_and_decrement();
+      return std::pair<bool, size_t>(false, 0);
+    }
+  };
+
+  template <typename BODY>
+  class incrementing_parallel_while_with_max : public incrementing_parallel_while<BODY> {
+    size_t _maxi;
+  public:
+    incrementing_parallel_while_with_max(size_t start_i, size_t max_i) :
+      incrementing_parallel_while<BODY>(start_i), _maxi(max_i) {}
+
+    std::pair<bool, size_t> increment_next_i(void)
+    { return incrementing_parallel_while<BODY>::increment_next_i_up_to(_maxi); }
+  };
+
+  template <typename ITEM, template <typename ITEM> class PARALLEL_WHILE = incrementing_parallel_while>
+  class item_applier {
+    PARALLEL_WHILE< item_applier<ITEM, PARALLEL_WHILE> >& _w;
+  public:
+    void operator()( ITEM item ) const {
+      apply_to_item(item);
+      if (!add_next_items(_w, item))
+        dispose_item(item);
+    }
+
+    typedef ITEM argument_type;
+    item_applier(PARALLEL_WHILE< item_applier<ITEM, PARALLEL_WHILE> >& w) : _w(w) {}
+  };
+
+  template <typename ITEM>
+  static
+  ITEM*
+  get_next_item(ITEM* item)
+  {
+    return item->next();
+  }
+
+  template <typename ITEM>
+  static
+  void
+  apply_to_item(ITEM* item)
+  {
+    item->apply();
+  }
+
+  template <typename ITEM>
+  static
+  void
+  dispose_item(ITEM* item)
+  {
+    delete item;
+  }
+
+  // returns true if item was recycled into w (so caller should not dispose of item),
+  // and false if item was not recycled (so caller MUST dispose of item)
+  template <typename ITEM>
+  static
+  bool
+  add_next_items(
+    incrementing_parallel_while_with_max< item_applier<ITEM*,
+                  incrementing_parallel_while_with_max> >& w,
+    ITEM* item)
+  {
+    const size_t n = item->is_first() ? tbb::DetectNumberOfWorkers() : 1;
+
+    bool res = false;
+    std::pair<bool, size_t> pr(w.increment_next_i());
+    if (pr.first && item->set_next_i(pr.second)) {
+      w.add(item);
+      res = true;
+
+      for (size_t i = 1; i != n; ++i) {
+        pr = w.increment_next_i();
+        if (pr.first) {
+          ITEM* clone = item->clone_for_next_i(pr.second);
+          if (clone) {
+            w.add(clone);
+            continue;
+          }
+        }
+        break;
+      }
+    }
+
+    return res;
+  }
+
+  template <typename ITEM, template <typename ITEM> class PARALLEL_WHILE>
+  static
+  void
+  parallel_while(ITEM* first_item, size_t item_count)
+  {
+    std::auto_ptr<ITEM> item(first_item); // capture first_item for exception safety
+    PARALLEL_WHILE< item_applier<ITEM*, PARALLEL_WHILE> >
+                                        w(0, item_count);
+    item_applier<ITEM*, PARALLEL_WHILE> body(w);
+    item_stream<ITEM*>                  stream(item.release());
+    w.run( stream, body );
+  }
+
+  // === end generic classes for use with parallel_while() ===
 #endif
 
 #include "letype.h"

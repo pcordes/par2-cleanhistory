@@ -55,6 +55,7 @@ Par2Creator::Par2Creator(void)
 
 #if WANT_CONCURRENT
 , use_concurrent_processing(true)
+, last_cout(tbb::tick_count::now())
 #endif
 {
 #if WANT_CONCURRENT
@@ -516,12 +517,11 @@ Par2CreatorSourceFile* Par2Creator::OpenSourceFile(const CommandLine::ExtraFile 
     }
 
     // Open the source file and compute its Hashes and CRCs.
-    if (!sourcefile->Open(noiselevel, extrafile, blocksize, deferhashcomputation
-#if WANT_CONCURRENT
-                          , cout_mutex
-#endif
-		))
-      return false;
+    if (!sourcefile->Open(noiselevel, extrafile, blocksize, deferhashcomputation, cout_mutex, last_cout)) {
+      tbb::mutex::scoped_lock l(cout_mutex);
+      cout << "error: could not open '" << extrafile.FileName() /* name */ << "'" << endl;
+      return NULL;
+    }
 
     // Record the file verification and file description packets
     // in the critical packet list.
@@ -535,6 +535,43 @@ Par2CreatorSourceFile* Par2Creator::OpenSourceFile(const CommandLine::ExtraFile 
 
     return sourcefile.release();
 }
+
+  #if WANT_PARALLEL_WHILE
+
+  template <typename CONTAINER>
+  class TOpenSourceFileItem {
+    size_t                                          _i;
+
+    Par2Creator*                                    _obj;
+    const CONTAINER&                                _files;
+    tbb::concurrent_vector<Par2CreatorSourceFile*>& _res;
+    tbb::atomic<u32>&                               _ok;
+
+  public:
+    TOpenSourceFileItem(size_t i, Par2Creator* obj, const CONTAINER& files,
+      tbb::concurrent_vector<Par2CreatorSourceFile*>& res, tbb::atomic<u32>& ok) :
+      _i(i), _obj(obj), _files(files), _res(res), _ok(ok) { _ok = true; }
+
+    void apply(void) {
+      Par2CreatorSourceFile* sf = _obj->OpenSourceFile(_files[_i]);
+      if (!sf)
+        _ok = false;
+      else
+        _res.push_back(sf);
+    }
+
+    TOpenSourceFileItem* clone_for_next_i(size_t i) const {
+      return _ok ? new TOpenSourceFileItem(i, _obj, _files, _res, _ok) : NULL;
+    }
+
+    bool set_next_i(size_t i) { _i = i; return false != _ok; }
+    TOpenSourceFileItem* next(void) const { return NULL; }
+    bool is_first(void) const { return 0 == _i; }
+  };
+
+  typedef TOpenSourceFileItem< vector<CommandLine::ExtraFile> > OpenSourceFileItem;
+
+  #else
 
 class ApplyOpenSourceFile {
     Par2Creator* const _obj;
@@ -562,6 +599,8 @@ class ApplyOpenSourceFile {
       _obj(obj), _extrafiles(v), _res(res), _ok(ok) { _ok = true; }
 };
 
+  #endif
+
 #endif
 
 
@@ -576,7 +615,12 @@ bool Par2Creator::OpenSourceFiles(const list<CommandLine::ExtraFile> &extrafiles
 
     tbb::concurrent_vector<Par2CreatorSourceFile*> res;
     tbb::atomic<u32> ok;
+  #if WANT_PARALLEL_WHILE
+    OpenSourceFileItem* first_item = new OpenSourceFileItem(0, this, v, res, ok);
+    parallel_while<OpenSourceFileItem, incrementing_parallel_while_with_max>(first_item, v.size());
+  #else
 	tbb::parallel_for(tbb::blocked_range<size_t>(0, v.size()), ::ApplyOpenSourceFile(this, v, res, ok));
+  #endif
     if (!ok)
       return false;
     std::copy(res.begin(), res.end(), std::back_inserter(sourcefiles));
@@ -983,19 +1027,23 @@ void Par2Creator::ProcessDataForOutputIndex(u32 outputblock, u32 outputendindex,
 
       if (noiselevel > CommandLine::nlQuiet)
       {
-        // Update a progress indicator
-        u32 oldfraction = (u32)(1000 * progress / totaldata);
-        progress += blocklength;
-        u32 newfraction = (u32)(1000 * progress / totaldata);
+        tbb::tick_count now = tbb::tick_count::now();
+        if ((now - last_cout).seconds() >= 0.1) { // only update every 0.1 seconds
+          // Update a progress indicator
+          u32 oldfraction = (u32)(1000 * progress / totaldata);
+          progress += blocklength;
+          u32 newfraction = (u32)(1000 * progress / totaldata);
 
-        if (oldfraction != newfraction)
-        {
-//        tbb::mutex::scoped_lock l(cout_mutex);
-          if (0 == cout_in_use.compare_and_swap(outputendindex, 0)) { // <= this version doesn't block - only need 1 thread to write to cout
-            cout << "Processing: " << newfraction/10 << '.' << newfraction%10 << "%\r" << flush;
-            cout_in_use = 0;
+          if (oldfraction != newfraction) {
+//          tbb::mutex::scoped_lock l(cout_mutex);
+            if (0 == cout_in_use.compare_and_swap(outputendindex, 0)) { // <= this version doesn't block - only need 1 thread to write to cout
+              last_cout = now;
+              cout << "Processing: " << newfraction/10 << '.' << newfraction%10 << "%\r" << flush;
+              cout_in_use = 0;
+            }
           }
-        }
+        } else
+          progress += blocklength;
       }
     }
 }
@@ -1093,8 +1141,7 @@ bool Par2Creator::ProcessData(u64 blockoffset, size_t blocklength)
         progress += blocklength;
         u32 newfraction = (u32)(1000 * progress / totaldata);
 
-        if (oldfraction != newfraction)
-        {
+        if (oldfraction != newfraction) {
           cout << "Processing: " << newfraction/10 << '.' << newfraction%10 << "%\r" << flush;
         }
       }

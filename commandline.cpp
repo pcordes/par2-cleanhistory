@@ -913,7 +913,7 @@ bool CommandLine::Parse(int argc, char *argv[])
   // Assume a memory limit of 16MB if not specified.
   if (memorylimit == 0)
   {
-#ifdef WIN32
+#if defined(WIN32) || defined(WIN64)
     u64 TotalPhysicalMemory = 0;
 
     HMODULE hLib = ::LoadLibraryA("kernel32.dll");
@@ -951,6 +951,15 @@ bool CommandLine::Parse(int argc, char *argv[])
 
     // Half of total physical memory
     memorylimit = (size_t)(TotalPhysicalMemory / 1048576 / 2);
+
+#elif __APPLE__
+
+    int name[2] = {CTL_HW, HW_USERMEM};
+    int usermem_bytes;
+    size_t size = sizeof(usermem_bytes);
+    sysctl( name, 2, &usermem_bytes, &size, NULL, 0 );
+    memorylimit = usermem_bytes / (2048 * 1024);
+
 #else
   #if WANT_CONCURRENT
     // Assume 128MB (otherwise processing is slower)

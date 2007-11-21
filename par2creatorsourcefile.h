@@ -41,7 +41,7 @@ public:
   // Open the source file and compute the Hashes and CRCs.
   bool Open(CommandLine::NoiseLevel noiselevel, const CommandLine::ExtraFile &extrafile, u64 blocksize, bool deferhashcomputation
 #if WANT_CONCURRENT
-            , tbb::mutex& cout_mutex
+            , tbb::mutex& cout_mutex, tbb::tick_count& last_cout
 #endif
 	       );
   void Close(void);

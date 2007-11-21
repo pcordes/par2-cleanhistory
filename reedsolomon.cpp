@@ -260,7 +260,13 @@ template <> bool ReedSolomon<Galois16>::SetInput(u32 count)
   return true;
 }
 
-#define WANT_PRESHIFTED_LH 1
+
+#ifdef LONGMULTIPLY
+  #if __GNUC__ && __i386__
+  extern "C" void ReedSolomonInnerLoop(const u32* src, const u32* end, u32* dst,
+                                       const u16* L, const u16* H);
+  #endif
+#endif
 
 template <> bool ReedSolomon<Galois16>::InternalProcess(const Galois16 &factor, size_t size, const void *inputbuffer, void *outputbuffer)
 {
@@ -279,57 +285,68 @@ template <> bool ReedSolomon<Galois16>::InternalProcess(const Galois16 &factor, 
   Galois16 *HH = &table[(2*256 + fh) * 256 + 0]; // factor.high * source.high
 
   // Combine the four multiplication tables into two
-#if WANT_PRESHIFTED_LH
-  unsigned int L[512]; // You double the space required but you
-  unsigned int H[512]; // end up saving ONE shift instruction. Yay!
-#else
-  unsigned int L[256];
-  unsigned int H[256];
-#endif
+  #if __GNUC__ && __i386__
+  typedef unsigned short LHEntry;
+  LHEntry L[256];
+  LHEntry H[256];
+  #else
+  typedef unsigned int LHEntry;
+  LHEntry L[512]; // Double the space required but
+  LHEntry H[512]; // save ONE shift instruction.
+  #endif
 
-#if __BYTE_ORDER == __LITTLE_ENDIAN
-  unsigned int *pL = &L[0];
-  unsigned int *pH = &H[0];
-#else
-  unsigned int *pL = &H[0];
-  unsigned int *pH = &L[0];
-#endif
+  #if __BYTE_ORDER == __LITTLE_ENDIAN
+  LHEntry *pL = &L[0];
+  LHEntry *pH = &H[0];
+  #else
+  LHEntry *pL = &H[0];
+  LHEntry *pH = &L[0];
+  #endif
 
   for (unsigned int i=0; i<256; i++)
   {
-    unsigned int temp;
+    LHEntry temp;
     {
       temp = *LL + *HL;
-#if __BYTE_ORDER == __LITTLE_ENDIAN
-#else
+  #if __BYTE_ORDER == __LITTLE_ENDIAN
+  #else
       temp = (temp >> 8) & 0xff | (temp << 8) & 0xff00;
-#endif
+  #endif
 
       *pL++ = temp;
       LL++;
       HL+=256;
 
-#if WANT_PRESHIFTED_LH
+  #if __GNUC__ && __i386__
+  #else
       pL[255] = temp << 16;
-#endif
+  #endif
     }
 
     {
       temp = *LH + *HH;
-#if __BYTE_ORDER == __LITTLE_ENDIAN
-#else
+  #if __BYTE_ORDER == __LITTLE_ENDIAN
+  #else
       temp = (temp >> 8) & 0xff | (temp << 8) & 0xff00;
-#endif
+  #endif
 
       *pH++ = temp;
       LH++;
       HH++;
 
-#if WANT_PRESHIFTED_LH
+  #if __GNUC__ && __i386__
+  #else
       pH[255] = temp << 16;
-#endif
+  #endif
     }
   }
+
+  #if __GNUC__ && __i386__
+
+  ReedSolomonInnerLoop((const u32*) inputbuffer, (const u32*) &((u8*)inputbuffer)[size],
+                       (u32 *)outputbuffer, L, H);
+
+  #else
 
   // Treat the buffers as arrays of 32-bit unsigned ints.
   u32 *src = (u32 *)inputbuffer;
@@ -337,42 +354,28 @@ template <> bool ReedSolomon<Galois16>::InternalProcess(const Galois16 &factor, 
   u32 *dst = (u32 *)outputbuffer;
   
   // Process the data
-  while (src < end)
-  {
+  do {
     u32 s = *src++;
 
     // Use the two lookup tables computed earlier
-//#if __BYTE_ORDER == __LITTLE_ENDIAN
-#if WANT_PRESHIFTED_LH
-	u16 sw = s >> 16;
+
+    // Visual C++ generates better code with this version (mostly because of the casts):
+	u16 sw = u16(s >> 16);
 	u32 d  = (L+256)[u8(sw >> 0)]; // use pre-shifted entries
         d ^= (H+256)[u8(sw >> 8)]; // use pre-shifted entries
         d ^= *dst ^ (L[u8(       s  >>  0)]      )
                   ^ (H[u8(((u16) s) >>  8)]      )
                   ; // <- one shift instruction eliminated
-#else
-  #if 1 // Visual C++ generates better code with this version (mostly because of the casts):
-	u16 sw = s >> 16;
-	u16 dw  = u16(L[u8(sw >> 0)]);
-        dw ^= u16(H[u8(sw >> 8)]);
-    u32 d = *dst ^ (L[u8(       s  >>  0)]      )
-                 ^ (H[u8(((u16) s) >>  8)]      )
-                 ^ (u32(dw) << 16);
-  #else // the original version (too many shift's and and's):
-    u32 d = *dst ^ (L[(s >> 0) & 0xff]      )
-                 ^ (H[(s >> 8) & 0xff]      )
-                 ^ (L[(s >> 16)& 0xff] << 16)
-                 ^ (H[(s >> 24)& 0xff] << 16);
-  #endif
-#endif
+
+    // the original version (too many shift's and and's):
+  //u32 d = *dst ^ (L[(s >> 0) & 0xff]      )
+  //             ^ (H[(s >> 8) & 0xff]      )
+  //             ^ (L[(s >> 16)& 0xff] << 16)
+  //             ^ (H[(s >> 24)& 0xff] << 16);
     *dst++ = d;
-//#else
-//    *dst++ ^= (L[(s >> 8) & 0xff]      )
-//           ^  (H[(s >> 0) & 0xff]      )
-//           ^  (L[(s >> 24)& 0xff] << 16)
-//           ^  (H[(s >> 16)& 0xff] << 16);
-//#endif
-  }
+  } while (src < end);
+
+  #endif
 #else
   // Treat the buffers as arrays of 16-bit Galois values.
 

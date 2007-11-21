@@ -158,7 +158,7 @@ inline bool ReedSolomon<g>::Process(size_t size, u32 inputindex, const void *inp
 	// Look up the appropriate element in the RS matrix
 	g factor = leftmatrix[outputindex * (datapresent + datamissing) + inputindex];
 	// Do nothing if the factor happens to be 0
-	if (factor == 0)
+	if (factor == 0 || 0 == size)
 		return eSuccess;
 	return this->InternalProcess (factor, size, inputbuffer, outputbuffer);
 }

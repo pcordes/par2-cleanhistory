@@ -19,6 +19,10 @@
 
 bin_PROGRAMS = par2
 
+if X86CPU
+ASMOBJECTS=reedsolomon-inner-i386.s
+endif
+
 par2_SOURCES = par2cmdline.cpp par2cmdline.h \
 	commandline.cpp commandline.h \
 	crc.cpp crc.h \
@@ -43,10 +47,11 @@ par2_SOURCES = par2cmdline.cpp par2cmdline.h \
 	recoverypacket.cpp recoverypacket.h \
 	reedsolomon.cpp reedsolomon.h \
 	verificationhashtable.cpp verificationhashtable.h \
-	verificationpacket.cpp verificationpacket.h
+	verificationpacket.cpp verificationpacket.h \
+	$(ASMOBJECTS)
 
-LDADD = -lstdc++
-AM_CXXFLAGS = -Wall
+LDADD = -lstdc++ -ltbb -L.
+AM_CXXFLAGS = -Wall -I../tbb20_20070927oss_src/include
 
 EXTRA_DIST = PORTING ROADMAP par2cmdline.sln par2cmdline.vcproj \
 	testdata.tar.gz pretest test1 test2 test3 test4 test5 test6 \

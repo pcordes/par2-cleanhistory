@@ -52,7 +52,7 @@ Par2CreatorSourceFile::~Par2CreatorSourceFile(void)
 
 bool Par2CreatorSourceFile::Open(CommandLine::NoiseLevel noiselevel, const CommandLine::ExtraFile &extrafile, u64 blocksize, bool deferhashcomputation
 #if WANT_CONCURRENT
-  , tbb::mutex& cout_mutex
+  , tbb::mutex& cout_mutex, tbb::tick_count& last_cout
 #endif
   )
 {
@@ -65,8 +65,13 @@ bool Par2CreatorSourceFile::Open(CommandLine::NoiseLevel noiselevel, const Comma
 
   // Determine what filename to record in the PAR2 files
   CommandLine* cl = CommandLine::get();
-  if (!cl)
+  if (!cl) {
+#if WANT_CONCURRENT
+    tbb::mutex::scoped_lock l(cout_mutex);
+#endif
+    cout << "error: missing cmd line - this should not happen!" << endl;
     return false; // something is wrong
+  }
 
   const string& bd = cl->GetBaseDirectory();
   if (bd.empty()) {
@@ -84,14 +89,25 @@ bool Par2CreatorSourceFile::Open(CommandLine::NoiseLevel noiselevel, const Comma
     string s(DiskFile::GetCanonicalPathname(diskfilename));
 #if defined(WIN32) || defined(__APPLE_CC__)
     if (0 != stricmp(s.substr(0, bd.length()).c_str(), bd.c_str()))
-      return false;
 #else
     if (s.substr(0, bd.length()) != bd)
-      return false;
 #endif
+    {
+#if WANT_CONCURRENT
+      tbb::mutex::scoped_lock l(cout_mutex);
+#endif
+      cout << "error: file '" << s << "' is not in the base directory '" << bd << "'" << endl;
+      return false;
+    }
     s.erase(0, bd.length()); // remove base_dir -> sub-path
-    if (s.empty())
+    if (s.empty()) {
+#if WANT_CONCURRENT
+      tbb::mutex::scoped_lock l(cout_mutex);
+#endif
+      cout << "error: file name missing after removing base directory (" << bd << ") from path (" <<
+              DiskFile::GetCanonicalPathname(diskfilename) << ")" << endl;
       return false; // a file name is needed
+    }
     parfilename = s;
   }
 
@@ -239,16 +255,23 @@ bool Par2CreatorSourceFile::Open(CommandLine::NoiseLevel noiselevel, const Comma
 
       if (noiselevel > CommandLine::nlQuiet)
       {
-        // Display progress
-        u32 oldfraction = (u32)(1000 * offset / filesize);
-        u32 newfraction = (u32)(1000 * (offset + want) / filesize);
-        if (oldfraction != newfraction)
-        {
 #if WANT_CONCURRENT
-          tbb::mutex::scoped_lock l(cout_mutex);
+        tbb::tick_count now = tbb::tick_count::now();
+        if ((now - last_cout).seconds() >= 0.1) { // only update every 0.1 seconds
 #endif
-          cout << newfraction/10 << '.' << newfraction%10 << "%\r" << flush;
+          // Display progress
+          u32 oldfraction = (u32)(1000 * offset / filesize);
+          u32 newfraction = (u32)(1000 * (offset + want) / filesize);
+          if (oldfraction != newfraction) {
+#if WANT_CONCURRENT
+            last_cout = now;
+            tbb::mutex::scoped_lock l(cout_mutex);
+#endif
+            cout << newfraction/10 << '.' << newfraction%10 << "%\r" << flush;
+          }
+#if WANT_CONCURRENT
         }
+#endif
       }
     }
 

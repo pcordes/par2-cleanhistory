@@ -160,6 +160,7 @@ protected:
   bool                      use_concurrent_processing;
   tbb::mutex                cout_mutex;
   tbb::atomic<u32>          cout_in_use; // this is used to display % done w/o blocking a thread
+  tbb::tick_count           last_cout;   // when cout was used for output
 #endif
 };
 

@@ -18,6 +18,8 @@ dnl  along with this program; if not, write to the Free Software
 dnl  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 dnl                                               -*- Autoconf -*-
 dnl Process this file with autoconf to produce a configure script.
+dnl
+dnl added AM_PROG_AS, added <case "$host_cpu" in>...<esac>, 
 
 AC_PREREQ(2.58a)
 AC_INIT([par2cmdline], [0.4], [peterbclements@users.sourceforge.net])
@@ -32,6 +34,55 @@ AM_INIT_AUTOMAKE
 dnl Checks for programs.
 AC_PROG_CXX
 AC_PROG_INSTALL
+AM_PROG_AS
+
+dnl AC_MSG_RESULT("$host_cpu" "$host_os")
+dnl
+dnl because GCC 4.0 produces i386 code that is sub-optimal,
+dnl an assembly file is used to bring performance on GCC
+dnl compiled versions up to the same level as Visual C++ 8
+dnl
+
+case "$host_cpu" in
+x86_64)
+	AC_DEFINE([MMX_COEF], [8], [Setting SIMD width 128x2 bits])
+	AC_DEFINE([MMX_TYPE], ["AMD64"], [Setting SIMD type AMD64])
+	AC_MSG_RESULT(SSE2_on_x86_64 is enabled)
+	AC_DEFINE([CFLAGS_ARCH], [-m64], [Specifying x86_64 arch])
+	AM_CONDITIONAL(AMD64, true)
+	AM_CONDITIONAL(X86MMX, false)
+	AM_CONDITIONAL(X86CPU, false)
+	;;
+i686)
+	AC_DEFINE([MMX_COEF], [4], [Setting SIMD width 128 bits])
+	AC_DEFINE([MMX_TYPE], ["SSE2"], [Setting SIMD type SSE2])
+	AC_MSG_RESULT(SSE2_on_i686 is enabled)
+	AM_CONDITIONAL(AMD64, false)
+	AM_CONDITIONAL(X86MMX, true)
+	AM_CONDITIONAL(X86CPU, true)
+	;;
+i586)
+	AC_DEFINE([MMX_COEF], [2], [Setting SIMD width 64 bits])
+	AC_DEFINE([MMX_TYPE], ["MMX"], [Setting SIMD type MMX])
+	AC_MSG_RESULT(MMX is enabled)
+	AM_CONDITIONAL(AMD64, false)
+	AM_CONDITIONAL(X86MMX, true)
+	AM_CONDITIONAL(X86CPU, true)
+	;;
+i386|i486)
+	AC_MSG_RESULT(x86 ASM is enabled)
+	AM_CONDITIONAL(AMD64, false)
+	AM_CONDITIONAL(X86CPU, true)
+	AM_CONDITIONAL(X86MMX, false)
+	;;
+*)
+	AM_CONDITIONAL(AMD64, false)
+	AM_CONDITIONAL(X86CPU, false)
+	AM_CONDITIONAL(X86MMX, false)
+	;;
+esac
+
+AM_CCASFLAGS="-I."
 
 dnl Checks for libraries.
 
@@ -56,6 +107,8 @@ AC_CHECK_FUNCS([stricmp] [strcasecmp])
 AC_CHECK_FUNCS([strchr] [memcpy])
 
 AC_CHECK_FUNCS([getopt] [getopt_long])
+
+AC_CHECK_FUNCS([realpath])
 
 AC_CONFIG_FILES([stamp-h], [echo timestamp > stamp-h])
 AC_CONFIG_FILES([Makefile])

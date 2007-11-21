@@ -25,7 +25,6 @@
 #include "par2cmdline.h"
 
 #if WANT_CONCURRENT
-//#include  <sstream>
   #include  <set>
 #endif
 
@@ -64,6 +63,7 @@ Par2Repairer::Par2Repairer(void)
 #if WANT_CONCURRENT
   use_concurrent_processing = true;
   cout_in_use = 0;
+  last_cout = tbb::tick_count::now();
 #endif
 }
 
@@ -359,17 +359,25 @@ bool Par2Repairer::LoadPacketsFromFile(string filename)
     {
       if (noiselevel > CommandLine::nlQuiet)
       {
-        // Update a progress indicator
-        u32 oldfraction = (u32)(1000 * progress / filesize);
-        u32 newfraction = (u32)(1000 * offset / filesize);
-        if (oldfraction != newfraction)
-        {
-          progress = offset;
 #if WANT_CONCURRENT
-          tbb::mutex::scoped_lock l(cout_mutex);
+        tbb::tick_count now = tbb::tick_count::now();
+        if ((now - last_cout).seconds() >= 0.1) { // only update every 0.1 seconds
 #endif
-          cout << "Loading: " << newfraction/10 << '.' << newfraction%10 << "%\r" << flush;
+          // Update a progress indicator
+          u32 oldfraction = (u32)(1000 * progress / filesize);
+          u32 newfraction = (u32)(1000 * offset / filesize);
+          if (oldfraction != newfraction)
+          {
+            progress = offset;
+#if WANT_CONCURRENT
+            last_cout = now;
+            tbb::mutex::scoped_lock l(cout_mutex);
+#endif
+            cout << "Loading: " << newfraction/10 << '.' << newfraction%10 << "%\r" << flush;
+          }
+#if WANT_CONCURRENT
         }
+#endif
       }
 
       // Attempt to read the next packet header
@@ -758,6 +766,34 @@ bool Par2Repairer::LoadCreatorPacket(DiskFile *diskfile, u64 offset, PACKET_HEAD
   typedef std::less<string> less_string_type;
   #endif
 
+  #if WANT_PARALLEL_WHILE
+
+  template <typename CONTAINER>
+  class TLoadPacketsFromFileItem {
+    size_t               _i;
+
+    Par2Repairer*        _obj;
+    const CONTAINER&     _files;
+
+  public:
+    TLoadPacketsFromFileItem(size_t i, Par2Repairer* obj, const CONTAINER& files) :
+      _i(i), _obj(obj), _files(files) {}
+
+    void apply(void) { _obj->LoadPacketsFromFile(_files[_i]); }
+
+    TLoadPacketsFromFileItem* clone_for_next_i(size_t i) const {
+      return new TLoadPacketsFromFileItem(i, _obj, _files);
+    }
+
+    bool set_next_i(size_t i) { _i = i; return true; }
+    TLoadPacketsFromFileItem* next(void) const { return NULL; }
+    bool is_first(void) const { return 0 == _i; }
+  };
+
+  typedef TLoadPacketsFromFileItem< vector<string> > LoadPacketsFromFileItem;
+
+  #else
+
   class ApplyLoadPacketsFromFile {
     Par2Repairer* const _obj;
     const std::vector<string>& _v;
@@ -772,6 +808,8 @@ bool Par2Repairer::LoadCreatorPacket(DiskFile *diskfile, u64 offset, PACKET_HEAD
     ApplyLoadPacketsFromFile( Par2Repairer* obj, const std::vector<string>& v ) :
       _obj(obj), _v(v) {}
   };
+
+  #endif
 
 #endif
 
@@ -867,8 +905,13 @@ bool Par2Repairer::LoadPacketsFromOtherFiles(string filename)
     std::vector<string> v;
     v.reserve(allfiles.size());
     std::copy(allfiles.begin(), allfiles.end(), std::back_inserter(v));
+  #if WANT_PARALLEL_WHILE
+    LoadPacketsFromFileItem* first_item = new LoadPacketsFromFileItem(0, this, v);
+    parallel_while<LoadPacketsFromFileItem, incrementing_parallel_while_with_max>(first_item, v.size());
+  #else
     tbb::parallel_for(tbb::blocked_range<size_t>(0, v.size(), 1),
       ::ApplyLoadPacketsFromFile(this, v));
+  #endif
   } else for (std::set<string, less_string_type>::iterator it = allfiles.begin();
             it != allfiles.end(); ++it)
     LoadPacketsFromFile(*it);
@@ -1289,6 +1332,35 @@ void Par2Repairer::VerifyOneSourceFile(Par2RepairerSourceFile *sourcefile, bool&
   }
 }
 
+  #if WANT_PARALLEL_WHILE
+
+  template <typename CONTAINER>
+  class TVerifySourceFileItem {
+    size_t               _i;
+
+    Par2Repairer*        _obj;
+    const CONTAINER&     _files;
+    bool&                _finalresult;
+
+  public:
+    TVerifySourceFileItem(size_t i, Par2Repairer* obj, const CONTAINER& files, bool& finalresult) :
+      _i(i), _obj(obj), _files(files), _finalresult(finalresult) {}
+
+    void apply(void) { _obj->VerifyOneSourceFile(_files[_i], _finalresult); }
+
+    TVerifySourceFileItem* clone_for_next_i(size_t i) const {
+      return new TVerifySourceFileItem(i, _obj, _files, _finalresult);
+    }
+
+    bool set_next_i(size_t i) { _i = i; return true; }
+    TVerifySourceFileItem* next(void) const { return NULL; }
+    bool is_first(void) const { return 0 == _i; }
+  };
+
+  typedef TVerifySourceFileItem< vector<Par2RepairerSourceFile*> > VerifySourceFileItem;
+
+  #else
+
 template <typename CONTAINER>
 class ApplyVerifyOneSourceFile {
     Par2Repairer* const _obj;
@@ -1305,6 +1377,8 @@ class ApplyVerifyOneSourceFile {
     ApplyVerifyOneSourceFile( Par2Repairer* obj, const CONTAINER& files, bool& finalresult) :
       _obj(obj), _files(files), _finalresult(finalresult) {}
 };
+
+  #endif
 
 #endif
 
@@ -1349,8 +1423,15 @@ bool Par2Repairer::VerifySourceFiles(void)
   sort(sortedfiles.begin(), sortedfiles.end(), SortSourceFilesByFileName);
 #if WANT_CONCURRENT
   if (use_concurrent_processing)
+  #if WANT_PARALLEL_WHILE
+  {
+    VerifySourceFileItem* first_item = new VerifySourceFileItem(0, this, sortedfiles, finalresult);
+    parallel_while<VerifySourceFileItem, incrementing_parallel_while_with_max>(first_item, sortedfiles.size());
+  }
+  #else
     tbb::parallel_for(tbb::blocked_range<size_t>(0, sortedfiles.size(), 1),
       ::ApplyVerifyOneSourceFile< vector<Par2RepairerSourceFile*> >(this, sortedfiles, finalresult));
+  #endif
   else for (vector<Par2RepairerSourceFile*>::const_iterator it = sortedfiles.begin(); it != sortedfiles.end(); ++it)
     VerifyOneSourceFile(*it, finalresult);
 #else
@@ -1710,16 +1791,25 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
   {
     if (noiselevel > CommandLine::nlQuiet)
     {
-      // Update a progress indicator
-      u32 oldfraction = (u32)(1000 * progress / diskfile->FileSize());
-      u32 newfraction = (u32)(1000 * (progress = filechecksummer.Offset()) / diskfile->FileSize());
-      if (oldfraction != newfraction)
-      {
 #if WANT_CONCURRENT
-        tbb::mutex::scoped_lock l(cout_mutex);
+      tbb::tick_count now = tbb::tick_count::now();
+      if ((now - last_cout).seconds() >= 0.1) { // only update every 0.1 seconds
 #endif
-        cout << "Scanning: \"" << diskfile->FileName() /* shortname */ << "\": " << newfraction/10 << '.' << newfraction%10 << "%\r" << flush;
-      }
+        // Update a progress indicator
+        u32 oldfraction = (u32)(1000 * progress / diskfile->FileSize());
+        u32 newfraction = (u32)(1000 * (progress = filechecksummer.Offset()) / diskfile->FileSize());
+        if (oldfraction != newfraction)
+        {
+#if WANT_CONCURRENT
+          last_cout = now;
+          tbb::mutex::scoped_lock l(cout_mutex);
+#endif
+          cout << "Scanning: \"" << diskfile->FileName() /* shortname */ << "\": " << newfraction/10 << '.' << newfraction%10 << "%\r" << flush;
+        }
+#if WANT_CONCURRENT
+      } else
+        progress = filechecksummer.Offset();
+#endif
     }
 
     // If we fail to find a match, it might be because it was a duplicate of a block
@@ -2398,19 +2488,24 @@ void Par2Repairer::ProcessDataForOutputIndex(u32 outputindex, u32 outputendindex
 
 		if (noiselevel > CommandLine::nlQuiet)
         {
-          // Update a progress indicator
-          u32 oldfraction = (u32)(1000 * progress / totaldata);
-          progress += blocklength;
-          u32 newfraction = (u32)(1000 * progress / totaldata);
+          tbb::tick_count now = tbb::tick_count::now();
+          if ((now - last_cout).seconds() >= 0.1) { // only update every 0.1 seconds
+            // Update a progress indicator
+            u32 oldfraction = (u32)(1000 * progress / totaldata);
+            progress += blocklength;
+            u32 newfraction = (u32)(1000 * progress / totaldata);
 
-          if (oldfraction != newfraction)
-          {
-//          tbb::mutex::scoped_lock l(cout_mutex);
-            if (0 == cout_in_use.compare_and_swap(outputendindex, 0)) { // <= this version doesn't block - only need 1 thread to write to cout
-              cout << "Repairing: " << newfraction/10 << '.' << newfraction%10 << "%\r" << flush;
-              cout_in_use = 0;
+            if (oldfraction != newfraction)
+            {
+//            tbb::mutex::scoped_lock l(cout_mutex);
+              if (0 == cout_in_use.compare_and_swap(outputendindex, 0)) { // <= this version doesn't block - only need 1 thread to write to cout
+                last_cout = now;
+                cout << "Repairing: " << newfraction/10 << '.' << newfraction%10 << "%\r" << flush;
+                cout_in_use = 0;
+              }
             }
-          }
+          } else
+            progress += blocklength;
         }
       }
 }
@@ -2569,15 +2664,26 @@ bool Par2Repairer::ProcessData(u64 blockoffset, size_t blocklength)
 
       if (noiselevel > CommandLine::nlQuiet)
       {
-        // Update a progress indicator
-        u32 oldfraction = (u32)(1000 * progress / totaldata);
-        progress += blocklength;
-        u32 newfraction = (u32)(1000 * progress / totaldata);
+#if WANT_CONCURRENT
+        tbb::tick_count now = tbb::tick_count::now();
+        if ((now - last_cout).seconds() >= 0.1) { // only update every 0.1 seconds
+#endif
+          // Update a progress indicator
+          u32 oldfraction = (u32)(1000 * progress / totaldata);
+          progress += blocklength;
+          u32 newfraction = (u32)(1000 * progress / totaldata);
 
-        if (oldfraction != newfraction)
-        {
-          cout << "Processing: " << newfraction/10 << '.' << newfraction%10 << "%\r" << flush;
-        }
+          if (oldfraction != newfraction)
+          {
+#if WANT_CONCURRENT
+            last_cout = now;
+#endif
+            cout << "Processing: " << newfraction/10 << '.' << newfraction%10 << "%\r" << flush;
+          }
+#if WANT_CONCURRENT
+        } else
+          progress += blocklength;
+#endif
       }
 
       ++copyblock;

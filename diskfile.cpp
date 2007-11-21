@@ -568,7 +568,11 @@ string DiskFile::GetCanonicalPathname(string filename)
     return filename;
   }
 
-
+#if HAVE_REALPATH
+  if (!realpath(filename.c_str(), curdir))
+    return string();
+  return curdir;
+#else
   // Allocate a work buffer and copy the resulting full path into it.
   char *work = new char[strlen(curdir) + filename.size() + 2];
   strcpy(work, curdir);
@@ -616,6 +620,7 @@ string DiskFile::GetCanonicalPathname(string filename)
   delete [] work;
 
   return result;
+#endif
 }
 
 list<string>* DiskFile::FindFiles(string path, string wildcard)
