@@ -44,42 +44,57 @@ dnl compiled versions up to the same level as Visual C++ 8
 dnl
 
 case "$host_cpu" in
-x86_64)
-	AC_DEFINE([MMX_COEF], [8], [Setting SIMD width 128x2 bits])
-	AC_DEFINE([MMX_TYPE], ["AMD64"], [Setting SIMD type AMD64])
-	AC_MSG_RESULT(SSE2_on_x86_64 is enabled)
-	AC_DEFINE([CFLAGS_ARCH], [-m64], [Specifying x86_64 arch])
-	AM_CONDITIONAL(AMD64, true)
-	AM_CONDITIONAL(X86MMX, false)
-	AM_CONDITIONAL(X86CPU, false)
-	;;
-i686)
-	AC_DEFINE([MMX_COEF], [4], [Setting SIMD width 128 bits])
-	AC_DEFINE([MMX_TYPE], ["SSE2"], [Setting SIMD type SSE2])
-	AC_MSG_RESULT(SSE2_on_i686 is enabled)
-	AM_CONDITIONAL(AMD64, false)
-	AM_CONDITIONAL(X86MMX, true)
-	AM_CONDITIONAL(X86CPU, true)
-	;;
-i586)
-	AC_DEFINE([MMX_COEF], [2], [Setting SIMD width 64 bits])
-	AC_DEFINE([MMX_TYPE], ["MMX"], [Setting SIMD type MMX])
-	AC_MSG_RESULT(MMX is enabled)
-	AM_CONDITIONAL(AMD64, false)
-	AM_CONDITIONAL(X86MMX, true)
-	AM_CONDITIONAL(X86CPU, true)
-	;;
-i386|i486)
-	AC_MSG_RESULT(x86 ASM is enabled)
-	AM_CONDITIONAL(AMD64, false)
-	AM_CONDITIONAL(X86CPU, true)
-	AM_CONDITIONAL(X86MMX, false)
-	;;
-*)
-	AM_CONDITIONAL(AMD64, false)
-	AM_CONDITIONAL(X86CPU, false)
-	AM_CONDITIONAL(X86MMX, false)
-	;;
+	x86_64)
+		AC_DEFINE([MMX_COEF], [8], [Setting SIMD width 128x2 bits])
+		AC_DEFINE([MMX_TYPE], ["AMD64"], [Setting SIMD type AMD64])
+		AC_MSG_RESULT(SSE2_on_x86_64 is enabled)
+		AC_DEFINE([CFLAGS_ARCH], [-m64], [Specifying x86_64 arch])
+		AM_CONDITIONAL(AMD64, true)
+		AM_CONDITIONAL(X86MMX, false)
+		AM_CONDITIONAL(X86CPU, false)
+		;;
+	i686)
+		AC_DEFINE([MMX_COEF], [4], [Setting SIMD width 128 bits])
+		AC_DEFINE([MMX_TYPE], ["SSE2"], [Setting SIMD type SSE2])
+		AC_MSG_RESULT(SSE2_on_i686 is enabled)
+		AM_CONDITIONAL(AMD64, false)
+		AM_CONDITIONAL(X86MMX, true)
+		AM_CONDITIONAL(X86CPU, true)
+		;;
+	i586)
+		AC_DEFINE([MMX_COEF], [2], [Setting SIMD width 64 bits])
+		AC_DEFINE([MMX_TYPE], ["MMX"], [Setting SIMD type MMX])
+		AC_MSG_RESULT(MMX is enabled)
+		AM_CONDITIONAL(AMD64, false)
+		AM_CONDITIONAL(X86MMX, true)
+		AM_CONDITIONAL(X86CPU, true)
+		;;
+	i386|i486)
+		AC_MSG_RESULT(x86 ASM is enabled)
+		AM_CONDITIONAL(AMD64, false)
+		AM_CONDITIONAL(X86CPU, true)
+		AM_CONDITIONAL(X86MMX, false)
+		;;
+	*)
+		AM_CONDITIONAL(AMD64, false)
+		AM_CONDITIONAL(X86CPU, false)
+		AM_CONDITIONAL(X86MMX, false)
+		;;
+esac
+
+case "$host" in
+	*-pc-linux-gnu)
+		sys_linux=true
+		AM_CONDITIONAL(PLATFORM_LINUX, true)
+		AM_CONDITIONAL(PLATFORM_DARWIN, false)
+		AH_TEMPLATE(PLATFORM_LINUX, [define if building for Linux])
+		;;
+	*-*-darwin*)
+		sys_darwin=true
+		AM_CONDITIONAL(PLATFORM_LINUX, false)
+		AM_CONDITIONAL(PLATFORM_DARWIN, true)
+		AH_TEMPLATE(PLATFORM_DARWIN, [define if building for Darwin / MacOS X])
+		;;
 esac
 
 AM_CCASFLAGS="-I."

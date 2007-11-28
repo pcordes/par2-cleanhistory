@@ -118,11 +118,9 @@ Result Par2Repairer::Process(const CommandLine &commandline, bool dorepair)
   string name;
   DiskFile::SplitFilename(par2filename, searchpath, name);
 
-#if !WANT_CONCURRENT
   // Load packets from the main PAR2 file
   if (!LoadPacketsFromFile(searchpath + name))
     return eLogicError;
-#endif
 
   // Load packets from other PAR2 files with names based on the original PAR2 file
   if (!LoadPacketsFromOtherFiles(par2filename))
@@ -906,8 +904,10 @@ bool Par2Repairer::LoadPacketsFromOtherFiles(string filename)
     v.reserve(allfiles.size());
     std::copy(allfiles.begin(), allfiles.end(), std::back_inserter(v));
   #if WANT_PARALLEL_WHILE
-    LoadPacketsFromFileItem* first_item = new LoadPacketsFromFileItem(0, this, v);
-    parallel_while<LoadPacketsFromFileItem, incrementing_parallel_while_with_max>(first_item, v.size());
+    if (!v.empty()) {
+      LoadPacketsFromFileItem* first_item = new LoadPacketsFromFileItem(0, this, v);
+      parallel_while<LoadPacketsFromFileItem, incrementing_parallel_while_with_max>(first_item, v.size());
+    }
   #else
     tbb::parallel_for(tbb::blocked_range<size_t>(0, v.size(), 1),
       ::ApplyLoadPacketsFromFile(this, v));
@@ -1425,8 +1425,10 @@ bool Par2Repairer::VerifySourceFiles(void)
   if (use_concurrent_processing)
   #if WANT_PARALLEL_WHILE
   {
-    VerifySourceFileItem* first_item = new VerifySourceFileItem(0, this, sortedfiles, finalresult);
-    parallel_while<VerifySourceFileItem, incrementing_parallel_while_with_max>(first_item, sortedfiles.size());
+    if (!sortedfiles.empty()) {
+      VerifySourceFileItem* first_item = new VerifySourceFileItem(0, this, sortedfiles, finalresult);
+      parallel_while<VerifySourceFileItem, incrementing_parallel_while_with_max>(first_item, sortedfiles.size());
+    }
   }
   #else
     tbb::parallel_for(tbb::blocked_range<size_t>(0, sortedfiles.size(), 1),

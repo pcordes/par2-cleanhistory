@@ -4,7 +4,7 @@
 # void ReedSolomonInnerLoop(const u32* src, const u32* end, u32* dst,
 #                           const u16* L, const u16* H);
 #
-	.if __APPLE__
+	.ifdef __APPLE__
 	.private_extern _ReedSolomonInnerLoop
 	.else
 	.globl ReedSolomonInnerLoop
@@ -12,7 +12,7 @@
 
 	.text
 
-	.if __APPLE__
+	.ifdef __APPLE__
 _ReedSolomonInnerLoop:
 	.else
 ReedSolomonInnerLoop:

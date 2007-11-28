@@ -616,8 +616,10 @@ bool Par2Creator::OpenSourceFiles(const list<CommandLine::ExtraFile> &extrafiles
     tbb::concurrent_vector<Par2CreatorSourceFile*> res;
     tbb::atomic<u32> ok;
   #if WANT_PARALLEL_WHILE
-    OpenSourceFileItem* first_item = new OpenSourceFileItem(0, this, v, res, ok);
-    parallel_while<OpenSourceFileItem, incrementing_parallel_while_with_max>(first_item, v.size());
+    if (!v.empty()) {
+      OpenSourceFileItem* first_item = new OpenSourceFileItem(0, this, v, res, ok);
+      parallel_while<OpenSourceFileItem, incrementing_parallel_while_with_max>(first_item, v.size());
+    }
   #else
 	tbb::parallel_for(tbb::blocked_range<size_t>(0, v.size()), ::ApplyOpenSourceFile(this, v, res, ok));
   #endif

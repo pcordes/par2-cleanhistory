@@ -57,7 +57,7 @@ the tbb<version>oss_src/build directory. To manually modify the Makefile:
 
  In `Makefile.in', go to line 73:
 
-DEFAULT_INCLUDES = -I. -I$(srcdir) -I../tbb20_20070927oss_src/include
+DEFAULT_INCLUDES = -I. -I$(srcdir) -I../tbb20_20071030oss_src/include
 
 and modify the path to wherever your extracted Intel TBB files are. Note that it
 should point at the `include' directory inside the main tbb directory.
@@ -204,6 +204,13 @@ enough memory to not be I/O bound when creating or repairing parity/data files.
 --- About this version ---
 
 
+The changes in the 20071128 version are:
+
+- if par2 was asked to verify/repair with just a single .par2 file, it would
+  crash. Fixed.
+- built for GNU/Linux using the Gentoo distribution (i386 version).
+- updated to use the 20071030 version of the Intel TBB library.
+
 The changes in the 20071121 version are:
 
 - changed several concurrent loops from using TBB's parallel_for to
@@ -338,7 +345,7 @@ The changes in the 20070831 version are:
 - modified to utilise Intel TBB 2.0.
 
 Vincent Tan.
-November 21, 2007.
+November 28, 2007.
 
 //
 //  Modifications for concurrent processing Copyright (c) 2007 Vincent Tan.

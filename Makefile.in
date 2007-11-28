@@ -113,7 +113,9 @@ par2_SOURCES = par2cmdline.cpp par2cmdline.h \
 
 
 LDADD = -lstdc++ -ltbb -L.
-AM_CXXFLAGS = -Wall -I../tbb20_20070927oss_src/include
+@PLATFORM_DARWIN_TRUE@AM_CXXFLAGS = -Wall -I../tbb20_20071030oss_src/include -gfull -O3 -fvisibility=hidden -fvisibility-inlines-hidden
+@PLATFORM_LINUX_TRUE@AM_CXXFLAGS = -Wall -I../tbb20_20071030oss_src/include
+@PLATFORM_LINUX_TRUE@AM_LDFLAGS = '-Wl,-R,$$ORIGIN'
 
 EXTRA_DIST = PORTING ROADMAP par2cmdline.sln par2cmdline.vcproj \
 	testdata.tar.gz pretest test1 test2 test3 test4 test5 test6 \

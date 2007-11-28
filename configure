@@ -311,7 +311,7 @@ ac_includes_default="\
 # include <unistd.h>
 #endif"
 
-ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os INSTALL_PROGRAM INSTALL_SCRIPT INSTALL_DATA PACKAGE VERSION ACLOCAL AUTOCONF AUTOMAKE AUTOHEADER MAKEINFO AMTAR install_sh STRIP ac_ct_STRIP INSTALL_STRIP_PROGRAM AWK SET_MAKE CXX CXXFLAGS LDFLAGS CPPFLAGS ac_ct_CXX EXEEXT OBJEXT DEPDIR am__include am__quote AMDEP_TRUE AMDEP_FALSE AMDEPBACKSLASH CXXDEPMODE CC CFLAGS ac_ct_CC CCDEPMODE CCAS CCASFLAGS AMD64_TRUE AMD64_FALSE X86MMX_TRUE X86MMX_FALSE X86CPU_TRUE X86CPU_FALSE CPP EGREP LIBOBJS LTLIBOBJS'
+ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os INSTALL_PROGRAM INSTALL_SCRIPT INSTALL_DATA PACKAGE VERSION ACLOCAL AUTOCONF AUTOMAKE AUTOHEADER MAKEINFO AMTAR install_sh STRIP ac_ct_STRIP INSTALL_STRIP_PROGRAM AWK SET_MAKE CXX CXXFLAGS LDFLAGS CPPFLAGS ac_ct_CXX EXEEXT OBJEXT DEPDIR am__include am__quote AMDEP_TRUE AMDEP_FALSE AMDEPBACKSLASH CXXDEPMODE CC CFLAGS ac_ct_CC CCDEPMODE CCAS CCASFLAGS AMD64_TRUE AMD64_FALSE X86MMX_TRUE X86MMX_FALSE X86CPU_TRUE X86CPU_FALSE PLATFORM_LINUX_TRUE PLATFORM_LINUX_FALSE PLATFORM_DARWIN_TRUE PLATFORM_DARWIN_FALSE CPP EGREP LIBOBJS LTLIBOBJS'
 ac_subst_files=''
 
 # Initialize some variables set by options.
@@ -3357,7 +3357,7 @@ CCDEPMODE=depmode=$am_cv_CC_dependencies_compiler_type
 
 
 case "$host_cpu" in
-x86_64)
+	x86_64)
 
 cat >>confdefs.h <<\_ACEOF
 #define MMX_COEF 8
@@ -3368,7 +3368,7 @@ cat >>confdefs.h <<\_ACEOF
 #define MMX_TYPE "AMD64"
 _ACEOF
 
-	echo "$as_me:$LINENO: result: SSE2_on_x86_64 is enabled" >&5
+		echo "$as_me:$LINENO: result: SSE2_on_x86_64 is enabled" >&5
 echo "${ECHO_T}SSE2_on_x86_64 is enabled" >&6
 
 cat >>confdefs.h <<\_ACEOF
@@ -3405,8 +3405,8 @@ else
   X86CPU_FALSE=
 fi
 
-	;;
-i686)
+		;;
+	i686)
 
 cat >>confdefs.h <<\_ACEOF
 #define MMX_COEF 4
@@ -3417,7 +3417,7 @@ cat >>confdefs.h <<\_ACEOF
 #define MMX_TYPE "SSE2"
 _ACEOF
 
-	echo "$as_me:$LINENO: result: SSE2_on_i686 is enabled" >&5
+		echo "$as_me:$LINENO: result: SSE2_on_i686 is enabled" >&5
 echo "${ECHO_T}SSE2_on_i686 is enabled" >&6
 
 
@@ -3449,8 +3449,8 @@ else
   X86CPU_FALSE=
 fi
 
-	;;
-i586)
+		;;
+	i586)
 
 cat >>confdefs.h <<\_ACEOF
 #define MMX_COEF 2
@@ -3461,7 +3461,7 @@ cat >>confdefs.h <<\_ACEOF
 #define MMX_TYPE "MMX"
 _ACEOF
 
-	echo "$as_me:$LINENO: result: MMX is enabled" >&5
+		echo "$as_me:$LINENO: result: MMX is enabled" >&5
 echo "${ECHO_T}MMX is enabled" >&6
 
 
@@ -3493,9 +3493,9 @@ else
   X86CPU_FALSE=
 fi
 
-	;;
-i386|i486)
-	echo "$as_me:$LINENO: result: x86 ASM is enabled" >&5
+		;;
+	i386|i486)
+		echo "$as_me:$LINENO: result: x86 ASM is enabled" >&5
 echo "${ECHO_T}x86 ASM is enabled" >&6
 
 
@@ -3527,8 +3527,8 @@ else
   X86MMX_FALSE=
 fi
 
-	;;
-*)
+		;;
+	*)
 
 
 if false; then
@@ -3559,7 +3559,60 @@ else
   X86MMX_FALSE=
 fi
 
-	;;
+		;;
+esac
+
+case "$host" in
+	*-pc-linux-gnu)
+		sys_linux=true
+
+
+if true; then
+  PLATFORM_LINUX_TRUE=
+  PLATFORM_LINUX_FALSE='#'
+else
+  PLATFORM_LINUX_TRUE='#'
+  PLATFORM_LINUX_FALSE=
+fi
+
+
+
+if false; then
+  PLATFORM_DARWIN_TRUE=
+  PLATFORM_DARWIN_FALSE='#'
+else
+  PLATFORM_DARWIN_TRUE='#'
+  PLATFORM_DARWIN_FALSE=
+fi
+
+
+
+		;;
+	*-*-darwin*)
+		sys_darwin=true
+
+
+if false; then
+  PLATFORM_LINUX_TRUE=
+  PLATFORM_LINUX_FALSE='#'
+else
+  PLATFORM_LINUX_TRUE='#'
+  PLATFORM_LINUX_FALSE=
+fi
+
+
+
+if true; then
+  PLATFORM_DARWIN_TRUE=
+  PLATFORM_DARWIN_FALSE='#'
+else
+  PLATFORM_DARWIN_TRUE='#'
+  PLATFORM_DARWIN_FALSE=
+fi
+
+
+
+		;;
 esac
 
 AM_CCASFLAGS="-I."
@@ -6726,6 +6779,34 @@ echo "$as_me: error: conditional \"X86MMX\" was never defined.
 Usually this means the macro was only invoked conditionally." >&2;}
    { (exit 1); exit 1; }; }
 fi
+if test -z "${PLATFORM_LINUX_TRUE}" && test -z "${PLATFORM_LINUX_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"PLATFORM_LINUX\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+echo "$as_me: error: conditional \"PLATFORM_LINUX\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
+if test -z "${PLATFORM_DARWIN_TRUE}" && test -z "${PLATFORM_DARWIN_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"PLATFORM_DARWIN\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+echo "$as_me: error: conditional \"PLATFORM_DARWIN\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
+if test -z "${PLATFORM_LINUX_TRUE}" && test -z "${PLATFORM_LINUX_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"PLATFORM_LINUX\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+echo "$as_me: error: conditional \"PLATFORM_LINUX\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
+if test -z "${PLATFORM_DARWIN_TRUE}" && test -z "${PLATFORM_DARWIN_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"PLATFORM_DARWIN\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+echo "$as_me: error: conditional \"PLATFORM_DARWIN\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
 
 : ${CONFIG_STATUS=./config.status}
 ac_clean_files_save=$ac_clean_files
@@ -7310,6 +7391,10 @@ s,@X86MMX_TRUE@,$X86MMX_TRUE,;t t
 s,@X86MMX_FALSE@,$X86MMX_FALSE,;t t
 s,@X86CPU_TRUE@,$X86CPU_TRUE,;t t
 s,@X86CPU_FALSE@,$X86CPU_FALSE,;t t
+s,@PLATFORM_LINUX_TRUE@,$PLATFORM_LINUX_TRUE,;t t
+s,@PLATFORM_LINUX_FALSE@,$PLATFORM_LINUX_FALSE,;t t
+s,@PLATFORM_DARWIN_TRUE@,$PLATFORM_DARWIN_TRUE,;t t
+s,@PLATFORM_DARWIN_FALSE@,$PLATFORM_DARWIN_FALSE,;t t
 s,@CPP@,$CPP,;t t
 s,@EGREP@,$EGREP,;t t
 s,@LIBOBJS@,$LIBOBJS,;t t

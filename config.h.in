@@ -108,6 +108,12 @@
 /* Define to the version of this package. */
 #undef PACKAGE_VERSION
 
+/* define if building for Darwin / MacOS X */
+#undef PLATFORM_DARWIN
+
+/* define if building for Linux */
+#undef PLATFORM_LINUX
+
 /* Define to 1 if you have the ANSI C header files. */
 #undef STDC_HEADERS
 

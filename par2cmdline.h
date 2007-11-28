@@ -348,7 +348,7 @@ using namespace std;
     size_t _maxi;
   public:
     incrementing_parallel_while_with_max(size_t start_i, size_t max_i) :
-      incrementing_parallel_while<BODY>(start_i), _maxi(max_i) {}
+      incrementing_parallel_while<BODY>(start_i), _maxi(max_i) { assert(start_i != max_i); }
 
     std::pair<bool, size_t> increment_next_i(void)
     { return incrementing_parallel_while<BODY>::increment_next_i_up_to(_maxi); }
