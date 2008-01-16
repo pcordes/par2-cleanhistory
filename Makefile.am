@@ -20,7 +20,11 @@
 bin_PROGRAMS = par2
 
 if X86CPU
-ASMOBJECTS=reedsolomon-inner-i386.s
+if PLATFORM_DARWIN
+ASMOBJECTS = reedsolomon-inner-i386-darwin.s
+else
+ASMOBJECTS = reedsolomon-inner-i386-posix.s
+endif
 endif
 
 par2_SOURCES = par2cmdline.cpp par2cmdline.h \
@@ -53,6 +57,9 @@ par2_SOURCES = par2cmdline.cpp par2cmdline.h \
 LDADD = -lstdc++ -ltbb -L.
 if PLATFORM_DARWIN
 AM_CXXFLAGS = -Wall -I../tbb20_20071030oss_src/include -gfull -O3 -fvisibility=hidden -fvisibility-inlines-hidden
+endif
+if PLATFORM_FREEBSD
+AM_CXXFLAGS = -Wall -I/usr/local/include -fvisibility=hidden -fvisibility-inlines-hidden
 endif
 if PLATFORM_LINUX
 AM_LDFLAGS = '-Wl,-R,$$ORIGIN'

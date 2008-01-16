@@ -17,7 +17,8 @@
 //  along with this program; if not, write to the Free Software
 //  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 //
-//  Modifications for concurrent processing Copyright (c) 2007 Vincent Tan.
+//  Modifications for concurrent processing, Unicode support, and hierarchial
+//  directory support are Copyright (c) 2007-2008 Vincent Tan.
 //  Search for "#if WANT_CONCURRENT" for concurrent code.
 //  Concurrent processing utilises Intel Thread Building Blocks 2.0,
 //  Copyright (c) 2007 Intel Corp.
@@ -43,7 +44,6 @@
 #include <assert.h>
 
 #define snprintf _snprintf
-#define stat _stati64 /* _stat64 */ /* so that files >= 4GB can be processed, was: #define stat _stat */
 
 #define __LITTLE_ENDIAN 1234
 #define __BIG_ENDIAN    4321
@@ -202,11 +202,42 @@ typedef   unsigned long long   u64;
 #endif
 
 #ifdef WIN32
-#define PATHSEP "\\"
-#define ALTPATHSEP "/"
+  #define PATHSEP "\\"
+  #define ALTPATHSEP "/"
+
+  #ifdef UNICODE
+    #define stat _wstati64 /* _stat64 */ /* 'i64' so that files >= 4GB can be processed, was: #define stat _stat */
+    #define struct_stat struct _stati64 /* _stati64 */ /* _stat64 */ /* 'i64' so that files >= 4GB can be processed, was: #define stat _stat */
+    // should probably rewrite these as inline functions instead of macros - but watch out for the '.c_str()' usage on tmp strings:
+    #define utf8_string_to_native_char_array(x) ::UTF8_to_UTF16(x).c_str()
+    #define utf8_char_array_to_native_char_array(x) ::UTF8_to_UTF16(x, strlen(x)).c_str()
+    #define utf8_string_to_cout_parameter(x) ::UTF8_string_to_cout_string(x)
+    #define native_char_array_to_utf8_string(x) ::UTF16_to_UTF8(x)
+    #define native_char_array_to_utf8_char_array(x) ::UTF16_to_UTF8(x).c_str()
+  #else
+    #define stat _stati64 /* _stat64 */ /* 'i64' so that files >= 4GB can be processed, was: #define stat _stat */
+    #define struct_stat struct _stati64 /* _stati64 */ /* _stat64 */ /* 'i64' so that files >= 4GB can be processed, was: #define stat _stat */
+    // should probably rewrite these as inline functions instead of macros - but watch out for the '.c_str()' usage on tmp strings:
+    #define utf8_string_to_native_char_array(x) x.c_str()
+    #define utf8_char_array_to_native_char_array(x) x
+    #define utf8_string_to_cout_parameter(x) x
+    #define native_char_array_to_utf8_string(x) string(x)
+    #define native_char_array_to_utf8_char_array(x) x
+  #endif
 #else
-#define PATHSEP "/"
-#define ALTPATHSEP "\\"
+  #define PATHSEP "/"
+  #define ALTPATHSEP "\\"
+
+  #define struct_stat struct stat
+  // should probably rewrite these as inline functions instead of macros - but watch out for the '.c_str()' usage on tmp strings:
+  #define utf8_string_to_native_char_array(x) x.c_str()
+  #define utf8_char_array_to_native_char_array(x) x
+  #define utf8_string_to_cout_parameter(x) x
+  #define native_char_array_to_utf8_string(x) string(x)
+  #define native_char_array_to_utf8_char_array(x) x
+
+  typedef char TCHAR;
+  #define _tcschr strchr
 #endif
 
 // Return type of par2cmdline
@@ -256,12 +287,21 @@ typedef enum Result
 
 using namespace std;
 
+#ifdef WIN32
+  extern wstring UTF8_to_UTF16(const char* utf8_str, size_t utf8_length);
+  extern wstring UTF8_to_UTF16(const string& utf8);
+  extern string  UTF8_string_to_cout_string(const string& utf8);
+  extern string  UTF16_to_UTF8(const wchar_t* utf16);
+#endif
+
 #ifdef offsetof
 #undef offsetof
 #endif
 #define offsetof(TYPE, MEMBER) ((size_t) ((char*)(&((TYPE *)1)->MEMBER) - (char*)1))
 
-#define WANT_CONCURRENT 1
+#define WANT_CONCURRENT                     1
+#define WANT_CONCURRENT_PAR2_FILE_OPENING   1
+#define WANT_CONCURRENT_SOURCE_VERIFICATION 0
 
 #if WANT_CONCURRENT
   #include "tbb/task_scheduler_init.h"
@@ -293,6 +333,7 @@ using namespace std;
   };
 
   #define WANT_PARALLEL_WHILE 1
+
   // using parallel_for() causes disk thrashing because it partitions
   // the files into large groups, each of which is iterated over by one
   // thread. For example, 100 files on a 2 CPU machine would be processed

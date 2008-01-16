@@ -17,7 +17,8 @@
 //  along with this program; if not, write to the Free Software
 //  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 //
-//  Modifications for concurrent processing Copyright (c) 2007 Vincent Tan.
+//  Modifications for concurrent processing, Unicode support, and hierarchial
+//  directory support are Copyright (c) 2007-2008 Vincent Tan.
 //  Search for "#if WANT_CONCURRENT" for concurrent code.
 //  Concurrent processing utilises Intel Thread Building Blocks 2.0,
 //  Copyright (c) 2007 Intel Corp.
@@ -44,7 +45,9 @@ protected:
 #if WANT_CONCURRENT
 public:
   void ProcessDataForOutputIndex(u32 outputstartindex, u32 outputendindex, size_t blocklength, u32 inputblock);
+  #if WANT_CONCURRENT_PAR2_FILE_OPENING
   Par2CreatorSourceFile* OpenSourceFile(const CommandLine::ExtraFile &extrafile);
+  #endif
 protected:
 #endif
 

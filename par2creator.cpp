@@ -17,7 +17,8 @@
 //  along with this program; if not, write to the Free Software
 //  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 //
-//  Modifications for concurrent processing Copyright (c) 2007 Vincent Tan.
+//  Modifications for concurrent processing, Unicode support, and hierarchial
+//  directory support are Copyright (c) 2007-2008 Vincent Tan.
 //  Search for "#if WANT_CONCURRENT" for concurrent code.
 //  Concurrent processing utilises Intel Thread Building Blocks 2.0,
 //  Copyright (c) 2007 Intel Corp.
@@ -501,25 +502,27 @@ bool Par2Creator::ComputeRecoveryFileCount(void)
 }
 
 
-#if WANT_CONCURRENT
+#if WANT_CONCURRENT_PAR2_FILE_OPENING
 
 Par2CreatorSourceFile* Par2Creator::OpenSourceFile(const CommandLine::ExtraFile &extrafile)
 {
     std::auto_ptr<Par2CreatorSourceFile> sourcefile(new Par2CreatorSourceFile);
 
     if (noiselevel > CommandLine::nlSilent) {
-    //string path;
-    //string name;
-    //DiskFile::SplitFilename(extrafile.FileName(), path, name);
+      string  name(utf8_string_to_cout_parameter(CommandLine::FileOrPathForCout(
+                   extrafile.FileName())));
 
       tbb::mutex::scoped_lock l(cout_mutex);
-      cout << "Opening: " << extrafile.FileName() /* name */ << endl;
+      cout << "Opening: " << name << endl;
     }
 
     // Open the source file and compute its Hashes and CRCs.
     if (!sourcefile->Open(noiselevel, extrafile, blocksize, deferhashcomputation, cout_mutex, last_cout)) {
+      string  name(utf8_string_to_cout_parameter(CommandLine::FileOrPathForCout(
+                   extrafile.FileName())));
+
       tbb::mutex::scoped_lock l(cout_mutex);
-      cout << "error: could not open '" << extrafile.FileName() /* name */ << "'" << endl;
+      cerr << "error: could not open '" << name << "'" << endl;
       return NULL;
     }
 
@@ -608,7 +611,7 @@ class ApplyOpenSourceFile {
 // the results in the file verification and file description packets.
 bool Par2Creator::OpenSourceFiles(const list<CommandLine::ExtraFile> &extrafiles)
 {
-#if WANT_CONCURRENT
+#if WANT_CONCURRENT_PAR2_FILE_OPENING
   if (use_concurrent_processing) {
     std::vector<CommandLine::ExtraFile> v;
     std::copy(extrafiles.begin(), extrafiles.end(), std::back_inserter(v));
@@ -638,16 +641,15 @@ bool Par2Creator::OpenSourceFiles(const list<CommandLine::ExtraFile> &extrafiles
   {
     Par2CreatorSourceFile *sourcefile = new Par2CreatorSourceFile;
 
-    string path;
-    string name;
-    DiskFile::SplitFilename(extrafile->FileName(), path, name);
+    if (noiselevel > CommandLine::nlSilent) {
+      string  name(utf8_string_to_cout_parameter(CommandLine::FileOrPathForCout(
+                   extrafile->FileName())));
 
-    if (noiselevel > CommandLine::nlSilent)
       cout << "Opening: " << name << endl;
+    }
 
     // Open the source file and compute its Hashes and CRCs.
-    if (!sourcefile->Open(noiselevel, *extrafile, blocksize, deferhashcomputation))
-    {
+    if (!sourcefile->Open(noiselevel, *extrafile, blocksize, deferhashcomputation)) {
       delete sourcefile;
       return false;
     }

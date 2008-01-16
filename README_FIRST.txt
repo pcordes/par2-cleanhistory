@@ -39,10 +39,62 @@ concurrent version of par2cmdline 0.4, go to:
 http://www.chuchusoft.com/par2_tbb
 
 
+--- Installing the pre-built Windows version ---
+
+
+The Windows version is a 32-bit Windows build of the concurrent version of
+par2cmdline 0.4. It is distributed as an executable (par2.exe) along
+with the required Intel Thread Building Blocks 2.0 library (tbb.dll)
+which comes from the tbb20_20071030oss_win.tar.gz distribution.
+
+The par2.exe and tbb.dll files included in this distribution require
+version 7.1 of the Microsoft C runtime libraries, which are probably
+already on your PC if it is running Windows 2000, Windows XP or
+Windows Vista. The Microsoft C runtime libraries are named MSVCP71.DLL
+and MSVCR71.DLL and are most likely to be in the C:\Windows\system32
+folder.
+
+To install, place the par2.exe and tbb.dll files in a folder and
+invoke them from the command line.
+
+To uninstall, delete the par2.exe and tbb.dll files along with any
+files from the distribution folder.
+
+
+--- Installing the pre-built Mac OS X version ---
+
+
+The Mac version is a "fat" build of the concurrent version of par2cmdline 0.4 for
+Mac OS X 10.4. In other words, the par2 executable file contains both a 32-bit
+x86 and a 64-bit x86_64 build of the par2 sources. It is distributed as an
+executable (par2) along with the required Intel Thread Building Blocks 2.0
+library (libtbb.dylib). The libtbb.dylib file is also "fat" (32-bit and
+64-bit versions are contained inside it).
+
+To install, place the par2 and libtbb.dylib files in a folder and
+invoke them from the command line.
+
+To uninstall, delete the par2 and libtbb.dylib files along with any
+files from the distribution folder.
+
+
+--- Installing the pre-built Linux version ---
+
+
+The Linux version is a 32-bit i386 build of the concurrent version of par2cmdline
+0.4 for GNU/Linux kernel version 2.6 with GCC 4. It is distributed as an
+executable (par2) along with the required Intel Thread Building Blocks 2.0
+library (libtbb.so).
+
+To install, place the par2 and libtbb.so files in a folder and
+invoke them from the command line.
+
+To uninstall, delete the par2 and libtbb.so files along with any
+files from the distribution folder.
+
+
 --- Building and installing on UNIX type systems ---
 
-
-This modified version has been built and tested on Mac OS X 10.4.10 using GCC 4.
 
 For UNIX or similar systems, the included configure script should be used to
 generate a makefile which is then built with a Make utility. Before using
@@ -55,16 +107,20 @@ script included in TBB to add the appropriate environment variables, or manually
 modify the Makefile to use the appropriate paths. The tbbvars.sh file is in
 the tbb<version>oss_src/build directory. To manually modify the Makefile:
 
- In `Makefile.in', go to line 73:
+  In `Makefile.am', go to line 59 (Darwin/Mac OS X):
 
-DEFAULT_INCLUDES = -I. -I$(srcdir) -I../tbb20_20071030oss_src/include
+AM_CXXFLAGS = -Wall -I../tbb20_20071030oss_src/include -gfull -O3 -fvisibility=hidden -fvisibility-inlines-hidden
+
+  or line 63 (other POSIX systems):
+
+AM_CXXFLAGS = -Wall -I../tbb20_20071030oss_src/include
 
 and modify the path to wherever your extracted Intel TBB files are. Note that it
 should point at the `include' directory inside the main tbb directory.
 
-For linking, the `Makefile.in' line 230:
+For linking, `Makefile.am' line 57:
 
-LDADD = -lstdc++ -ltbb
+LDADD = -lstdc++ -ltbb -L.
 
 has already had the tbb library added to the list of libraries to link against.
 You will need to have libtbb.a (or libtbb.dylib or libtbb.so etc.) in your
@@ -80,9 +136,47 @@ For example:
 
 LDADD = -lstdc++ -ltbb -L.
 
-The Mac OS X distribution of this project is not built using either or the
-above techniques; instead, it uses a relative-path for the dynamic library.
-Please see the README_FIRST.txt in the Mac OS X distribution for more information.
+The Mac OS X distribution of this project is built using a relative-path
+for the dynamic library. Please see the next section for more information.
+
+
+--- Building and installing on Mac OS X systems ---
+
+
+The Mac version is a "fat" build of the concurrent version of par2cmdline 0.4 for
+Mac OS X 10.4. In other words, the par2 executable file contains both a 32-bit
+x86 and a 64-bit x86_64 build of the par2 sources. It is distributed as an
+executable (par2) along with the required Intel Thread Building Blocks 2.0
+library (libtbb.dylib). The libtbb.dylib file is also "fat" (32-bit and
+64-bit versions are contained inside it).
+
+The par2 32-bit executable is built under 10.4, and the 64-bit executable is
+built under 10.5, which are then symbol stripped and combined using the lipo
+tool. The 64-bit executable needs to be built under 10.5 because the 10.4
+build of the 64-bit executable was found to (1) cause the "fat" executable
+to crash when it was run under 10.5, and (2) not be able to correctly read
+par2 files when those files resided on a SMB server (ie, a shared folder on
+a Windows computer). Combining the mixed-OS executables solves both of these
+problems (see the 20080116 version release notes below for details).
+
+The libtbb.dylib file is built from the TBB 2.0 tbb20_20071030oss_src.tar.gz
+distribution. It was built for both the x86 and x86_64 architectures and will
+therefore run on all 32-bit x86 hardware (such as the Intel Core Duo CPU) as
+well as 64-bit x86_64 hardware (such as Intel Core 2 Duo and Athlon-64 CPUs).
+
+Normally, the libtbb.dylib file is built so that for a client program to use
+it, it would usually have to be placed in /usr/lib, which would therefore
+require administrator privileges to install it onto a Mac OS X system. The
+version included in this distribution does not require that it be installed,
+and is therefore usable "out of the box". To implement this change, the
+macos.gcc.inc file was modified with this line:
+
+LIB_LINK_FLAGS = -dynamiclib -Wl,-exported_symbols_list,$(TBB.DEF) \
+-install_name @executable_path/$@
+
+
+The par2 executable has been symbol stripped (using the 'strip' command line
+tool).
 
 
 --- Building and installing on Windows operating systems ---
@@ -105,6 +199,20 @@ Edition but the executable is linked against the Visual Studio .NET 2003's C
 runtime library to avoid having to distribute the Visual C++ 2005's C runtime
 library. Please see the README_FIRST.txt in the Windows distribution for more
 information.
+
+To build this version, download the source tarball from the website and use the
+included vcproj with Visual C++ Express 2005. You will need to ensure that
+the include and library paths that point to the PSDK are *above* the ones
+that point to Visual C++'s folders so that the Microsoft C Runtime that is
+used to build the program are from the older version 7.1 library and not
+the version 8.0 library that comes with Visual C++ Express 2005.
+
+In order to get things to link, the project has been modified according to
+the instructions in the "Using VS2005 to ship legacy code for XP and
+Windows 2000.html" file which is located in the "Using VS2005 to ship
+legacy code for XP and Windows 2000" folder. You will also need to copy
+the CxxFrameHandler3_to_CxxFrameHandler.obj file to your
+par2cmdline-0.4-tbb-<version> folder.
 
 
 
@@ -203,6 +311,96 @@ enough memory to not be I/O bound when creating or repairing parity/data files.
 
 --- About this version ---
 
+
+The changes in the 20080116 version are:
+
+- the initial processing (creation) and verification (repair) of target files
+  is now performed serially because of complaints that concurrent processing
+  was causing disk thrashing. Since this part of the program's operation is
+  mostly I/O bound, the change back to serial processing is a reasonable change.
+- full paths are now only displayed when a -d parameter is given to the
+  program, otherwise the original behavior of displaying just the file name
+  now occurs.
+- Unicode support was added. This requires some explanation.
+
+  Windows version: previous versions processed file names and directory
+  paths using the default code page for non-Unicode programs, which is
+  typically whatever the current locale setting is. In other words,
+  file names that had characters that could not be represented in the
+  default code page ended up being mangled by the program, resulting
+  in .par2 files which contained mangled file names (directory names
+  also suffered mangling). Such .par2 files could not be used on other
+  computers unless they also used the same code page, which for POSIX
+  systems is very unlikely. The correct solution is to store and retrieve
+  all file names and directory paths using a Unicode representation.
+  To keep some backward compatibility, the names should be stored in
+  an 8-bit-per-character format (so that older .par2 files can still
+  be processed by the program), so decomposed (a.k.a. composite) UTF-8
+  was chosen as the canonical file name encoding for the storage of
+  file names and directory paths in .par2 files.
+  To implement this change, the Windows version now takes all file
+  names from the operating system as precomposed UTF-16 and converts
+  them to decomposed UTF-8 strings which are stored in memory and
+  in .par2 files. If the operating system needs to use the string,
+  it is converted back into precomposed UTF-16 and then passed to
+  the OS for use.
+
+  POSIX version: it is assumed that the operating system will deliver
+  and accept decomposed (a.k.a. composite) UTF-8 characters to/from
+  the program so no conversion is performed. Darwin / Mac OS X is
+  one such system that passes and accepts UTF-8 character strings, so
+  the Mac OS X version of the program works correctly with .par2
+  files containing Unicode file names. If the operating system
+  does not deliver nor accept decomposed UTF-8 character strings,
+  this version (and previous versions) will not create .par2 files
+  that contain Unicode file names or directory paths, and which
+  will cause mangled file/directory names when used on other
+  operating systems.
+
+  Summary:
+  [1] for .par2 files created on Windows using a version of
+  this program prior to this version and which contain non-ASCII
+  characters (characters outside the range of 0 - 127 (0x00 - 0x7F)
+  in numeric value, this program will be able to use such files
+  but will probably complain about missing files or will create
+  repaired files using the wrong file name or directory path, ie,
+  file name mangling will occur.
+  [2] for .par2 files created on UTF-8 based operating systems
+  using a prior version of this program, this version will be
+  able to correctly use such files (ie, the changes made to the
+  program should not cause any change in behavior, and no file
+  name mangling will occur).
+  [3] for .par2 files created on non-UTF-8 based operating systems
+  using a prior version of this program, this version will be
+  able to use such files but file name mangling will occur.
+  [4] for .par2 files created on UTF-8 based operating systems
+  using this version of this program, file name mangling will
+  not occur.
+  [5] for .par2 files created on non-UTF-8 based operating systems
+  using this version of this program, file name mangling will
+  occur.
+
+- split up the reedsolomon-inner.s file so that it builds
+  correctly under Darwin and other POSIX systems.
+- changed the way the pre-built Mac OS X version is built because
+  the 64-bit version built under 10.4 (1) crashes when it is run
+  under 10.5, and (2) does not read par2 files when the files
+  reside on a SMB server (ie, a shared folder on a Windows
+  computer) because 10.4's SMB client software appears to
+  incorrectly service 64-bit client programs. These problems only
+  occurred with the 64-bit version; the 32-bit version works
+  correctly.
+
+  To solve both of these problems, the pre-built executable is now
+  released containing both a 32-bit executable built under 10.4
+  and a 64-bit executable built under 10.5. When run under 10.4,
+  the 64-bit executable does not execute because it is linked
+  against the 10.5 system libraries, so under 10.4, only the
+  32-bit executable is executed, which solves problem (2). When
+  run under 10.5 on a 64-bit x86 computer, the 64-bit executable
+  executes, which solves problem (1), and because 10.5's SMB
+  client correctly services 64-bit client programs, problem (2)
+  is solved.
 
 The changes in the 20071128 version are:
 
@@ -344,11 +542,14 @@ The changes in the 20070831 version are:
 
 - modified to utilise Intel TBB 2.0.
 
+
+
 Vincent Tan.
-November 28, 2007.
+January 16, 2008.
 
 //
-//  Modifications for concurrent processing Copyright (c) 2007 Vincent Tan.
+//  Modifications for concurrent processing, Unicode support, and hierarchial
+//  directory support are Copyright (c) 2007-2008 Vincent Tan.
 //  Search for "#if WANT_CONCURRENT" for concurrent code.
 //  Concurrent processing utilises Intel Thread Building Blocks 2.0,
 //  Copyright (c) 2007 Intel Corp.

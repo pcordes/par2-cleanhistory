@@ -16,6 +16,12 @@
 //  You should have received a copy of the GNU General Public License
 //  along with this program; if not, write to the Free Software
 //  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+//
+//  Modifications for concurrent processing, Unicode support, and hierarchial
+//  directory support are Copyright (c) 2007-2008 Vincent Tan.
+//  Search for "#if WANT_CONCURRENT" for concurrent code.
+//  Concurrent processing utilises Intel Thread Building Blocks 2.0,
+//  Copyright (c) 2007 Intel Corp.
 
 #ifndef __PAR2REPAIRERSOURCEFILE_H__
 #define __PAR2REPAIRERSOURCEFILE_H__

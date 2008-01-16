@@ -82,7 +82,8 @@ install_sh = @install_sh@
 
 bin_PROGRAMS = par2
 
-@X86CPU_TRUE@ASMOBJECTS = reedsolomon-inner-i386.s
+@PLATFORM_DARWIN_FALSE@@X86CPU_TRUE@ASMOBJECTS = reedsolomon-inner-i386-posix.s
+@PLATFORM_DARWIN_TRUE@@X86CPU_TRUE@ASMOBJECTS = reedsolomon-inner-i386-darwin.s
 
 par2_SOURCES = par2cmdline.cpp par2cmdline.h \
 	commandline.cpp commandline.h \
@@ -131,7 +132,10 @@ CONFIG_CLEAN_FILES = stamp-h
 bin_PROGRAMS = par2$(EXEEXT)
 PROGRAMS = $(bin_PROGRAMS)
 
-@X86CPU_TRUE@am__objects_1 = reedsolomon-inner-i386.$(OBJEXT)
+@PLATFORM_DARWIN_FALSE@@X86CPU_TRUE@am__objects_1 = \
+@PLATFORM_DARWIN_FALSE@@X86CPU_TRUE@	reedsolomon-inner-i386-posix.$(OBJEXT)
+@PLATFORM_DARWIN_TRUE@@X86CPU_TRUE@am__objects_1 = \
+@PLATFORM_DARWIN_TRUE@@X86CPU_TRUE@	reedsolomon-inner-i386-darwin.$(OBJEXT)
 am_par2_OBJECTS = par2cmdline.$(OBJEXT) commandline.$(OBJEXT) \
 	crc.$(OBJEXT) creatorpacket.$(OBJEXT) criticalpacket.$(OBJEXT) \
 	datablock.$(OBJEXT) descriptionpacket.$(OBJEXT) \

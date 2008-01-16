@@ -16,8 +16,19 @@
 //  You should have received a copy of the GNU General Public License
 //  along with this program; if not, write to the Free Software
 //  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+//
+//  Modifications for concurrent processing, Unicode support, and hierarchial
+//  directory support are Copyright (c) 2007-2008 Vincent Tan.
+//  Search for "#if WANT_CONCURRENT" for concurrent code.
+//  Concurrent processing utilises Intel Thread Building Blocks 2.0,
+//  Copyright (c) 2007 Intel Corp.
 
 #include "par2cmdline.h"
+
+/* **TMP**
+	extern void
+	dump_utf8_as_utf16(const string& name);
+// **TMP** */
 
 #ifdef _MSC_VER
 #ifdef _DEBUG
@@ -51,7 +62,7 @@ Par2CreatorSourceFile::~Par2CreatorSourceFile(void)
 // in a file description packet and a file verification packet.
 
 bool Par2CreatorSourceFile::Open(CommandLine::NoiseLevel noiselevel, const CommandLine::ExtraFile &extrafile, u64 blocksize, bool deferhashcomputation
-#if WANT_CONCURRENT
+#if WANT_CONCURRENT_PAR2_FILE_OPENING
   , tbb::mutex& cout_mutex, tbb::tick_count& last_cout
 #endif
   )
@@ -66,10 +77,10 @@ bool Par2CreatorSourceFile::Open(CommandLine::NoiseLevel noiselevel, const Comma
   // Determine what filename to record in the PAR2 files
   CommandLine* cl = CommandLine::get();
   if (!cl) {
-#if WANT_CONCURRENT
+#if WANT_CONCURRENT_PAR2_FILE_OPENING
     tbb::mutex::scoped_lock l(cout_mutex);
 #endif
-    cout << "error: missing cmd line - this should not happen!" << endl;
+    cerr << "error: missing cmd line - this should not happen!" << endl;
     return false; // something is wrong
   }
 
@@ -93,24 +104,24 @@ bool Par2CreatorSourceFile::Open(CommandLine::NoiseLevel noiselevel, const Comma
     if (s.substr(0, bd.length()) != bd)
 #endif
     {
-#if WANT_CONCURRENT
+#if WANT_CONCURRENT_PAR2_FILE_OPENING
       tbb::mutex::scoped_lock l(cout_mutex);
 #endif
-      cout << "error: file '" << s << "' is not in the base directory '" << bd << "'" << endl;
+      cerr << "error: file '" << s << "' is not in the base directory '" << bd << "'" << endl;
       return false;
     }
     s.erase(0, bd.length()); // remove base_dir -> sub-path
     if (s.empty()) {
-#if WANT_CONCURRENT
+#if WANT_CONCURRENT_PAR2_FILE_OPENING
       tbb::mutex::scoped_lock l(cout_mutex);
 #endif
-      cout << "error: file name missing after removing base directory (" << bd << ") from path (" <<
+      cerr << "error: file name missing after removing base directory (" << bd << ") from path (" <<
               DiskFile::GetCanonicalPathname(diskfilename) << ")" << endl;
       return false; // a file name is needed
     }
     parfilename = s;
   }
-
+//printf("about to store this in packet:\n"); dump_utf8_as_utf16(parfilename);
   // Create the Description and Verification packets
   descriptionpacket = new DescriptionPacket;
   descriptionpacket->Create(parfilename, filesize);
@@ -255,7 +266,7 @@ bool Par2CreatorSourceFile::Open(CommandLine::NoiseLevel noiselevel, const Comma
 
       if (noiselevel > CommandLine::nlQuiet)
       {
-#if WANT_CONCURRENT
+#if WANT_CONCURRENT_PAR2_FILE_OPENING
         tbb::tick_count now = tbb::tick_count::now();
         if ((now - last_cout).seconds() >= 0.1) { // only update every 0.1 seconds
 #endif
@@ -263,13 +274,13 @@ bool Par2CreatorSourceFile::Open(CommandLine::NoiseLevel noiselevel, const Comma
           u32 oldfraction = (u32)(1000 * offset / filesize);
           u32 newfraction = (u32)(1000 * (offset + want) / filesize);
           if (oldfraction != newfraction) {
-#if WANT_CONCURRENT
+#if WANT_CONCURRENT_PAR2_FILE_OPENING
             last_cout = now;
             tbb::mutex::scoped_lock l(cout_mutex);
 #endif
             cout << newfraction/10 << '.' << newfraction%10 << "%\r" << flush;
           }
-#if WANT_CONCURRENT
+#if WANT_CONCURRENT_PAR2_FILE_OPENING
         }
 #endif
       }

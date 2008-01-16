@@ -17,7 +17,8 @@
 //  along with this program; if not, write to the Free Software
 //  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 //
-//  Modifications for concurrent processing Copyright (c) 2007 Vincent Tan.
+//  Modifications for concurrent processing, Unicode support, and hierarchial
+//  directory support are Copyright (c) 2007-2008 Vincent Tan.
 //  Search for "#if WANT_CONCURRENT" for concurrent code.
 //  Concurrent processing utilises Intel Thread Building Blocks 2.0,
 //  Copyright (c) 2007 Intel Corp.
@@ -38,7 +39,8 @@ void banner(void)
 
   cout << version << ", Copyright (C) 2003 Peter Brian Clements." << endl
 #if WANT_CONCURRENT
-       << "Modifications for concurrent processing Copyright (c) 2007 Vincent Tan." << endl
+       << "Modifications for concurrent processing, Unicode support, and hierarchial" << endl
+       << "directory support are Copyright (c) 2007-2008 Vincent Tan." << endl
        << "Concurrent processing utilises Intel Thread Building Blocks 2.0, Copyright (c) 2007 Intel Corp." << endl
 #endif
        << endl
@@ -51,7 +53,11 @@ void banner(void)
        << endl;
 }
 
+#ifdef UNICODE
+int wmain(int argc, wchar_t *argv[])
+#else
 int main(int argc, char *argv[])
+#endif
 {
 #if WANT_CONCURRENT
   tbb::task_scheduler_init init;

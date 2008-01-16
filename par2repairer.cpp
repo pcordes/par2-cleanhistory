@@ -17,7 +17,8 @@
 //  along with this program; if not, write to the Free Software
 //  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 //
-//  Modifications for concurrent processing Copyright (c) 2007 Vincent Tan.
+//  Modifications for concurrent processing, Unicode support, and hierarchial
+//  directory support are Copyright (c) 2007-2008 Vincent Tan.
 //  Search for "#if WANT_CONCURRENT" for concurrent code.
 //  Concurrent processing utilises Intel Thread Building Blocks 2.0,
 //  Copyright (c) 2007 Intel Corp.
@@ -318,11 +319,8 @@ bool Par2Repairer::LoadPacketsFromFile(string filename)
     return true;
   }
 
-  if (noiselevel > CommandLine::nlSilent)
-  {
-    string path;
-    string name;
-    DiskFile::SplitFilename(filename, path, name);
+  if (noiselevel > CommandLine::nlSilent) {
+    string  name(utf8_string_to_cout_parameter(CommandLine::FileOrPathForCout(filename)));
 #if WANT_CONCURRENT
     tbb::mutex::scoped_lock l(cout_mutex);
 #endif
@@ -885,7 +883,7 @@ bool Par2Repairer::LoadPacketsFromOtherFiles(string filename)
   }
 
   // Find files called "*.par2" or "name.*.par2"
-#if WANT_CONCURRENT
+#if WANT_CONCURRENT_PAR2_FILE_OPENING
   std::set<string, less_string_type> allfiles;
   {
     string wildcard = name.empty() ? "*.par2" : name + ".*.par2";
@@ -918,28 +916,26 @@ bool Par2Repairer::LoadPacketsFromOtherFiles(string filename)
 #else
   {
     string wildcard = name.empty() ? "*.par2" : name + ".*.par2";
-    list<string> *files = DiskFile::FindFiles(path, wildcard);
+  //list<string> *files = DiskFile::FindFiles(path, wildcard);
+    std::auto_ptr< list<string> >  files(DiskFile::FindFiles(path, wildcard));
 
     // Load packets from each file that was found
     for (list<string>::const_iterator s=files->begin(); s!=files->end(); ++s)
-    {
       LoadPacketsFromFile(*s);
-    }
 
-    delete files;
+  //delete files;
   }
 
   {
     string wildcard = name.empty() ? "*.PAR2" : name + ".*.PAR2";
-    list<string> *files = DiskFile::FindFiles(path, wildcard);
+  //list<string> *files = DiskFile::FindFiles(path, wildcard);
+    std::auto_ptr< list<string> >  files(DiskFile::FindFiles(path, wildcard));
 
     // Load packets from each file that was found
     for (list<string>::const_iterator s=files->begin(); s!=files->end(); ++s)
-    {
       LoadPacketsFromFile(*s);
-    }
 
-    delete files;
+  //delete files;
   }
 #endif
 
@@ -1271,7 +1267,7 @@ static bool SortSourceFilesByFileName(Par2RepairerSourceFile *low,
   return low->TargetFileName() < high->TargetFileName();
 }
 
-#if WANT_CONCURRENT
+#if WANT_CONCURRENT_SOURCE_VERIFICATION
 
 void Par2Repairer::VerifyOneSourceFile(Par2RepairerSourceFile *sourcefile, bool& finalresult)
 {
@@ -1319,14 +1315,11 @@ void Par2Repairer::VerifyOneSourceFile(Par2RepairerSourceFile *sourcefile, bool&
       // The file does not exist.
       delete diskfile;
 
-      if (noiselevel > CommandLine::nlSilent)
-      {
-      //string path;
-      //string name;
-      //DiskFile::SplitFilename(filename, path, name);
+      if (noiselevel > CommandLine::nlSilent) {
+        string  name(utf8_string_to_cout_parameter(CommandLine::FileOrPathForCout(filename)));
 
         tbb::mutex::scoped_lock l(cout_mutex);
-        cout << "Target: \"" << filename /* name */ << "\" - missing." << endl;
+        cout << "Target: \"" << name << "\" - missing." << endl;
       }
     }
   }
@@ -1421,7 +1414,7 @@ bool Par2Repairer::VerifySourceFiles(void)
   }
 
   sort(sortedfiles.begin(), sortedfiles.end(), SortSourceFilesByFileName);
-#if WANT_CONCURRENT
+#if WANT_CONCURRENT_SOURCE_VERIFICATION
   if (use_concurrent_processing)
   #if WANT_PARALLEL_WHILE
   {
@@ -1486,12 +1479,8 @@ bool Par2Repairer::VerifySourceFiles(void)
       // The file does not exist.
       delete diskfile;
 
-      if (noiselevel > CommandLine::nlSilent)
-      {
-        string path;
-        string name;
-        DiskFile::SplitFilename(filename, path, name);
-
+      if (noiselevel > CommandLine::nlSilent) {
+        string  name(utf8_string_to_cout_parameter(CommandLine::FileOrPathForCout(filename)));
         cout << "Target: \"" << name << "\" - missing." << endl;
       }
     }
@@ -1734,9 +1723,8 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
 
   matchtype = eNoMatch;
 
-//string path;
-//string name;
-//DiskFile::SplitFilename(diskfile->FileName(), path, name);
+  string name(utf8_string_to_cout_parameter(CommandLine::FileOrPathForCout(
+              diskfile->FileName())));
 
   // Is the file empty
   if (diskfile->FileSize() == 0)
@@ -1746,11 +1734,11 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
     {
       if (originalsourcefile != 0)
       {
-        cout << "Target: \"" << diskfile->FileName() /* name */ << "\" - empty." << endl;
+        cout << "Target: \"" << name << "\" - empty." << endl;
       }
       else
       {
-        cout << "File: \"" << diskfile->FileName() /* name */ << "\" - empty." << endl;
+        cout << "File: \"" << name << "\" - empty." << endl;
       }
     }
     return true;
@@ -1806,7 +1794,7 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
           last_cout = now;
           tbb::mutex::scoped_lock l(cout_mutex);
 #endif
-          cout << "Scanning: \"" << diskfile->FileName() /* shortname */ << "\": " << newfraction/10 << '.' << newfraction%10 << "%\r" << flush;
+          cout << "Scanning: \"" << name /* shortname */ << "\": " << newfraction/10 << '.' << newfraction%10 << "%\r" << flush;
         }
 #if WANT_CONCURRENT
       } else
@@ -1929,7 +1917,7 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
           if (originalsourcefile != 0)
           {
             cout << "Target: \"" 
-                 << diskfile->FileName() // name
+                 << name
                  << "\" - damaged, found " 
                  << count 
                  << " data blocks from several target files." 
@@ -1938,7 +1926,7 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
           else
           {
             cout << "File: \"" 
-                 << diskfile->FileName() // name
+                 << name
                  << "\" - found " 
                  << count 
                  << " data blocks from several target files." 
@@ -1951,7 +1939,7 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
           if (originalsourcefile == sourcefile)
           {
             cout << "Target: \"" 
-                 << diskfile->FileName() // name
+                 << name
                  << "\" - damaged. Found " 
                  << count 
                  << " of " 
@@ -1962,11 +1950,11 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
           // Were we scanning the target file or an extra file
           else if (originalsourcefile != 0)
           {
-            string path, targetname;
-            DiskFile::SplitFilename(sourcefile->TargetFileName(), path, targetname);
+            string targetname(utf8_string_to_cout_parameter(CommandLine::FileOrPathForCout(
+                              sourcefile->TargetFileName())));
 
             cout << "Target: \"" 
-                 << diskfile->FileName() // name
+                 << name
                  << "\" - damaged. Found " 
                  << count 
                  << " of " 
@@ -1978,11 +1966,11 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
           }
           else
           {
-            string path, targetname;
-            DiskFile::SplitFilename(sourcefile->TargetFileName(), path, targetname);
+            string targetname(utf8_string_to_cout_parameter(CommandLine::FileOrPathForCout(
+                              sourcefile->TargetFileName())));
 
             cout << "File: \"" 
-                 << diskfile->FileName() // name
+                 << name
                  << "\" - found " 
                  << count 
                  << " of " 
@@ -2006,16 +1994,16 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
         // Did we match the target file
         if (originalsourcefile == sourcefile)
         {
-          cout << "Target: \"" << diskfile->FileName() /* name */ << "\" - found." << endl;
+          cout << "Target: \"" << name << "\" - found." << endl;
         }
         // Were we scanning the target file or an extra file
         else if (originalsourcefile != 0)
         {
-          string path, targetname;
-          DiskFile::SplitFilename(sourcefile->TargetFileName(), path, targetname);
+          string targetname(utf8_string_to_cout_parameter(CommandLine::FileOrPathForCout(
+                            sourcefile->TargetFileName())));
 
           cout << "Target: \"" 
-               << diskfile->FileName() // name
+               << name
                << "\" - is a match for \"" 
                << targetname 
                << "\"." 
@@ -2023,11 +2011,11 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
         }
         else
         {
-          string path, targetname;
-          DiskFile::SplitFilename(sourcefile->TargetFileName(), path, targetname);
+          string targetname(utf8_string_to_cout_parameter(CommandLine::FileOrPathForCout(
+                            sourcefile->TargetFileName())));
 
           cout << "File: \"" 
-               << diskfile->FileName() // name
+               << name
                << "\" - is a match for \"" 
                << targetname 
                << "\"." 
@@ -2051,7 +2039,7 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
       if (duplicatecount > 0)
       {
         cout << "File: \""
-             << diskfile->FileName() // name
+             << name
              << "\" - found " 
              << duplicatecount
              << " duplicate data blocks."
@@ -2060,7 +2048,7 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
       else
       {
         cout << "File: \"" 
-             << diskfile->FileName() // name
+             << name
              << "\" - no data found." 
              << endl;
       }

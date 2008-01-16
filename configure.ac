@@ -87,13 +87,22 @@ case "$host" in
 		sys_linux=true
 		AM_CONDITIONAL(PLATFORM_LINUX, true)
 		AM_CONDITIONAL(PLATFORM_DARWIN, false)
+		AM_CONDITIONAL(PLATFORM_FREEBSD, false)
 		AH_TEMPLATE(PLATFORM_LINUX, [define if building for Linux])
 		;;
 	*-*-darwin*)
 		sys_darwin=true
 		AM_CONDITIONAL(PLATFORM_LINUX, false)
 		AM_CONDITIONAL(PLATFORM_DARWIN, true)
+		AM_CONDITIONAL(PLATFORM_FREEBSD, false)
 		AH_TEMPLATE(PLATFORM_DARWIN, [define if building for Darwin / MacOS X])
+		;;
+	*-*-freebsd*)
+		sys_freebsd=true
+		AM_CONDITIONAL(PLATFORM_LINUX, false)
+		AM_CONDITIONAL(PLATFORM_DARWIN, false)
+		AM_CONDITIONAL(PLATFORM_FREEBSD, true)
+		AH_TEMPLATE(PLATFORM_FREEBSD, [define if building for FreeBSD])
 		;;
 esac
 

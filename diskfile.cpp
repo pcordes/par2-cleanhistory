@@ -16,6 +16,12 @@
 //  You should have received a copy of the GNU General Public License
 //  along with this program; if not, write to the Free Software
 //  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+//
+//  Modifications for concurrent processing, Unicode support, and hierarchial
+//  directory support are Copyright (c) 2007-2008 Vincent Tan.
+//  Search for "#if WANT_CONCURRENT" for concurrent code.
+//  Concurrent processing utilises Intel Thread Building Blocks 2.0,
+//  Copyright (c) 2007 Intel Corp.
 
 #include "par2cmdline.h"
 
@@ -30,6 +36,8 @@ static char THIS_FILE[]=__FILE__;
 
 #ifdef WIN32
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#include <tchar.h>
 
 #define OffsetType __int64
 #define MaxOffset 0x7fffffffffffffffI64
@@ -63,7 +71,7 @@ bool DiskFile::Create(string _filename, u64 _filesize)
   filesize = _filesize;
 
   // Create the file
-  hFile = ::CreateFileA(_filename.c_str(), GENERIC_READ | GENERIC_WRITE, 0, NULL, CREATE_NEW, 0, NULL);
+  hFile = ::CreateFile(utf8_string_to_native_char_array(_filename), GENERIC_READ | GENERIC_WRITE, 0, NULL, CREATE_NEW, 0, NULL);
   if (hFile == INVALID_HANDLE_VALUE)
   {
     DWORD error = ::GetLastError();
@@ -87,7 +95,7 @@ bool DiskFile::Create(string _filename, u64 _filesize)
 
       ::CloseHandle(hFile);
       hFile = INVALID_HANDLE_VALUE;
-      ::DeleteFile(_filename.c_str());
+      ::DeleteFile(utf8_string_to_native_char_array(_filename));
 
       return false;
     }
@@ -101,7 +109,7 @@ bool DiskFile::Create(string _filename, u64 _filesize)
 
       ::CloseHandle(hFile);
       hFile = INVALID_HANDLE_VALUE;
-      ::DeleteFile(_filename.c_str());
+      ::DeleteFile(utf8_string_to_native_char_array(_filename));
 
       return false;
     }
@@ -175,7 +183,7 @@ bool DiskFile::Open(string _filename, u64 _filesize)
   filename = _filename;
   filesize = _filesize;
 
-  hFile = ::CreateFileA(_filename.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+  hFile = ::CreateFile(utf8_string_to_native_char_array(_filename), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
   if (hFile == INVALID_HANDLE_VALUE)
   {
     DWORD error = ::GetLastError();
@@ -257,43 +265,50 @@ void DiskFile::Close(void)
 
 string DiskFile::GetCanonicalPathname(string filename)
 {
-  char fullname[MAX_PATH];
-  char *filepart;
+#ifdef UNICODE
+  typedef wstring TSTRING;
+#else
+  typedef string TSTRING;
+#endif
+
+  TCHAR fullname[MAX_PATH];
+  TCHAR *filepart;
 
   // Resolve a relative path to a full path
-  int length = ::GetFullPathName(filename.c_str(), sizeof(fullname), fullname, &filepart);
-  if (length <= 0 || sizeof(fullname) < length)
+  int length = ::GetFullPathName(utf8_string_to_native_char_array(filename),
+	                             sizeof(fullname)/sizeof(TCHAR), fullname, &filepart);
+  if (length <= 0 || (sizeof(fullname)/sizeof(TCHAR)) < length)
     return filename;
 
   // Make sure the drive letter is upper case.
   fullname[0] = toupper(fullname[0]);
 
   // Translate all /'s to \'s
-  char *current = strchr(fullname, '/');
+  TCHAR *current = _tcschr/*strchr*/(fullname, '/');
   while (current)
   {
     *current++ = '\\';
-    current  = strchr(current, '/');
+    current  = _tcschr/*strchr*/(current, '/');
   }
 
   // Copy the root directory to the output string
-  string longname(fullname, 3);
+  TSTRING longname(fullname, 3);
 
   // Start processing at the first path component
   current = &fullname[3];
-  char *limit = &fullname[length];
+  TCHAR *limit = &fullname[length];
 
   // Process until we reach the end of the full name
   while (current < limit)
   {
-    char *tail;
+    TCHAR *tail;
 
     // Find the next \, or the end of the string
-    (tail = strchr(current, '\\')) || (tail = limit);
+    (tail = _tcschr/*strchr*/(current, '\\')) || (tail = limit);
     *tail = 0;
 
     // Create a wildcard to search for the path
-    string wild = longname + current;
+    TSTRING wild = longname + current;
     WIN32_FIND_DATA finddata;
     HANDLE hFind = ::FindFirstFile(wild.c_str(), &finddata);
     if (hFind == INVALID_HANDLE_VALUE)
@@ -315,7 +330,7 @@ string DiskFile::GetCanonicalPathname(string filename)
       longname += '\\';
   }
 
-  return longname;
+  return native_char_array_to_utf8_string(longname.c_str());
 }
 
 list<string>* DiskFile::FindFiles(string path, string wildcard)
@@ -324,14 +339,14 @@ list<string>* DiskFile::FindFiles(string path, string wildcard)
 
   wildcard = path + wildcard;
   WIN32_FIND_DATA fd;
-  HANDLE h = ::FindFirstFile(wildcard.c_str(), &fd);
+  HANDLE h = ::FindFirstFile(utf8_string_to_native_char_array(wildcard), &fd);
   if (h != INVALID_HANDLE_VALUE)
   {
     do
     {
       if (0 == (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
       {
-        matches->push_back(path + fd.cFileName);
+        matches->push_back(path + native_char_array_to_utf8_string(fd.cFileName));
       }
     } while (::FindNextFile(h, &fd));
     ::FindClose(h);
@@ -810,19 +825,19 @@ void DiskFile::SplitFilename(string filename, string &path, string &name)
 
 bool DiskFile::FileExists(string filename)
 {
-  struct stat st;
+  struct_stat st;
 #if SUPPORT_BLOCK_DEVICES
   return ((0 == stat(filename.c_str(), &st)) &&
           (0 != (st.st_mode & (S_IFREG|S_IFBLK))));
 #else
-  return ((0 == stat(filename.c_str(), &st)) && (0 != (st.st_mode & S_IFREG)));
+  return ((0 == stat(utf8_string_to_native_char_array(filename), &st)) && (0 != (st.st_mode & S_IFREG)));
 #endif
 }
 
 u64 DiskFile::GetFileSize(string filename)
 {
-  struct stat st;
-  if (0 == stat(filename.c_str(), &st)) {
+  struct_stat st;
+  if (0 == stat(utf8_string_to_native_char_array(filename), &st)) {
     if (st.st_mode & S_IFREG)
     {
       return st.st_size;
@@ -924,18 +939,18 @@ bool DiskFile::Rename(void)
   char newname[_MAX_PATH+1];
   u32 index = 0;
 
-  struct stat st;
+  struct_stat st;
 
   do
   {
-    int length = snprintf(newname, _MAX_PATH, "%s.%d", filename.c_str(), ++index);
+    int length = snprintf(newname, _MAX_PATH, "%s.%u", filename.c_str(), ++index);
     if (length < 0)
     {
       cerr << filename << " cannot be renamed." << endl;
       return false;
     }
     newname[length] = 0;
-  } while (stat(newname, &st) == 0);
+  } while (stat(utf8_char_array_to_native_char_array(newname), &st) == 0);
 
   return Rename(newname);
 }

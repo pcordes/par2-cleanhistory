@@ -17,7 +17,8 @@
 //  along with this program; if not, write to the Free Software
 //  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 //
-//  Modifications for concurrent processing Copyright (c) 2007 Vincent Tan.
+//  Modifications for concurrent processing, Unicode support, and hierarchial
+//  directory support are Copyright (c) 2007-2008 Vincent Tan.
 //  Search for "#if WANT_CONCURRENT" for concurrent code.
 //  Concurrent processing utilises Intel Thread Building Blocks 2.0,
 //  Copyright (c) 2007 Intel Corp.
@@ -33,10 +34,201 @@ static char THIS_FILE[]=__FILE__;
 #endif
 
 #ifdef WIN32
+  #include <tchar.h>
+
   enum { OS_SEPARATOR = '\\', OTHER_OS_SEPARATOR = '/' };
+
+  wstring
+  UTF8_to_UTF16(const char* utf8_str, size_t utf8_length)
+  {
+    int i, j;
+
+    // NTFS filenames are precomposed UCS-2 (UTF-16) characters
+    // but par2 files require decomposed (aka composite) UCS-1
+    // (UTF-8) characters, so first convert from UTF-8 and then
+    // precompose the string
+
+    if (utf8_length == 0) {
+      i = 0;
+    } else {
+      i = ::MultiByteToWideChar(CP_UTF8, //    UTF-8
+            0,                           //    character-type options
+            utf8_str,                    //    string to map
+            (int) utf8_length,           //    number of bytes in string
+            NULL,                        //    wide-character buffer
+            0                            //    size of buffer
+          );
+      if (i == 0)
+        return wstring();
+    }
+
+    wstring tmp(i, '\0');
+    if (!tmp.data())
+      return wstring();
+
+    if (utf8_length != 0) {
+      j = ::MultiByteToWideChar(CP_UTF8, //    UTF-8
+            0,                           //    character-type options
+            utf8_str,                    //    string to map
+            (int) utf8_length,           //    number of bytes in string
+            &tmp[0],                     //    wide-character buffer
+            i                            //    size of buffer
+          );
+      assert(j == i);
+    }
+
+    i = ::FoldString(MAP_PRECOMPOSED, tmp.c_str(), tmp.length(), NULL, 0);
+    if (0 == i)
+      return wstring();
+
+    wstring res(i, '\0'); // i does not include the end '\0' char
+    j = ::FoldString(MAP_PRECOMPOSED, tmp.c_str(), tmp.length(), &res[0], i);
+    assert(j == i);
+    if (0 == j || j != i)
+      return wstring();
+
+//cout << "UTF8_to_UTF16 translated '" << utf8_str << "' [" << utf8_length << "] char utf8 string to " << i << " char wide string." << endl;
+    return res;
+  }
+
+  wstring
+  UTF8_to_UTF16(const string& utf8)
+  {
+    return UTF8_to_UTF16(utf8.c_str(), utf8.length());
+  }
+
+  static
+  string
+  UTF16_to_console_code_page(const wstring& utf16)
+  {
+    int    i, j;
+	UINT   cp = ::GetConsoleOutputCP();
+
+    {
+      i = ::WideCharToMultiByte(cp,      //    code page
+            0,                           //    performance and mapping flags
+            utf16.c_str(),               //    wide-character string
+			utf16.length(),              //    number of chars in string
+            NULL,                        //    buffer for new string
+            0,                           //    size of buffer in bytes
+            NULL, NULL);
+      if (i == 0)
+        return string();
+    }
+
+    string res(i, '\0');
+    if (!res.data())
+      return string();
+
+//size_t sz = (size_t) (j-1);
+    {
+      j = ::WideCharToMultiByte(cp,      //    code page
+            0,                           //    performance and mapping flags
+            utf16.c_str(),               //    wide-character string
+			utf16.length(),              //    number of chars in string
+            &res[0],                     //    buffer for new string
+            i,                           //    size of buffer in bytes
+            NULL, NULL);
+      assert(j == i);
+    }
+//cout << "UTF16_to_UTF8 translated " << sz << " char utf16 string to '" << res << "' [" << i << " chars]." << endl;
+    return res;
+  }
+
+  string
+  UTF8_string_to_cout_string(const string& utf8)
+  {
+    // on Win32, cout outputs to the console which is
+    // DOS-compatible, meaning that it doesn't understand
+    // UTF-8, which means that the input string needs
+    // to be translated to the console's code page
+    return ::UTF16_to_console_code_page(::UTF8_to_UTF16(utf8));
+  }
+
+  string
+  UTF16_to_UTF8(const wchar_t* utf16)
+  {
+    int    i, j;
+
+    // NTFS filenames are precomposed UCS-2 (UTF-16) characters
+    // but par2 files require decomposed (aka composite) UCS-1
+    // (UTF-8) characters, so first decompose the string then
+    // convert it to UTF-8
+
+    i = ::FoldString(MAP_COMPOSITE, utf16, -1, NULL, 0);
+    if (0 == i)
+      return string();
+
+    wstring tmp(i, '\0'); // i includes the '\0' char
+    j = ::FoldString(MAP_COMPOSITE, utf16, -1, &tmp[0], i);
+    assert(j == i);
+    if (0 == j || j != i)
+      return string();
+
+    {
+      i = ::WideCharToMultiByte(CP_UTF8, //    UTF-8
+            0,                           //    performance and mapping flags
+            tmp.c_str(),                 //    wide-character string
+            j-1,                         //    number of chars in string
+            NULL,                        //    buffer for new string
+            0,                           //    size of buffer in bytes
+            NULL, NULL);
+      if (i == 0)
+        return string();
+    }
+
+    string res(i, '\0');
+    if (!res.data())
+      return string();
+
+//size_t sz = (size_t) (j-1);
+    {
+      j = ::WideCharToMultiByte(CP_UTF8, //    UTF-8
+            0,                           //    performance and mapping flags
+            tmp.c_str(),                 //    wide-character string
+            j-1,                         //    number of chars in string
+            &res[0],                     //    buffer for new string
+            i,                           //    size of buffer in bytes
+            NULL, NULL);
+      assert(j == i);
+    }
+//cout << "UTF16_to_UTF8 translated " << sz << " char utf16 string to '" << res << "' [" << i << " chars]." << endl;
+    return res;
+  }
+
 #else
   enum { OS_SEPARATOR = '/', OTHER_OS_SEPARATOR = '\\' };
   #include <dirent.h>
+
+/*#include <CoreFoundation/CoreFoundation.h>
+
+  extern void
+  dump_utf8_as_utf16(const string& name);
+
+  void
+  dump_utf8_as_utf16(const string& name)
+  {
+    printf("name[utf8]: ");
+    for (size_t z = 0; z != name.length(); ++z)
+      printf("'%c' %02X ", (unsigned) (0xFF & name[z]), (unsigned) (0xFF & name[z]));
+    printf("\n");
+
+    CFStringRef  s  =  ::CFStringCreateWithBytes(NULL,
+                         (const UInt8*) name.c_str(),
+                         name.length(), kCFStringEncodingUTF8, false);
+    size_t sz = (size_t) ::CFStringGetLength(s);
+
+    UniChar* buf = (UniChar*) malloc(sizeof(UniChar) * sz);
+    if (buf != NULL)
+      ::CFStringGetCharacters(s, ::CFRangeMake(0, sz), buf);
+
+    printf("name[utf16]: ");
+    for (size_t z = 0; z != sz; ++z)
+      printf("'%c' %02X ", buf[z] < 0x80 ? buf[z] : '?', buf[z]);
+    printf("\n");
+
+    free(buf);
+  } */
 #endif
 
 
@@ -45,10 +237,9 @@ extern bool is_existing_folder(const string& dir);
 bool
 is_existing_folder(const string& dir)
 {
-  struct stat st;
-  if (stat(dir.c_str(), &st))
+  struct_stat st;
+  if (stat(utf8_string_to_native_char_array(dir), &st))
     return false;
-
   return (st.st_mode & S_IFDIR) != 0;
 }
 
@@ -61,22 +252,22 @@ build_file_list_in_imp(string dir, list<string>* l)
   dir += '*';
 
   WIN32_FIND_DATA fd;
-  HANDLE h = ::FindFirstFile(dir.c_str(), &fd);
+  HANDLE h = ::FindFirstFile(utf8_string_to_native_char_array(dir), &fd);
   dir.erase(dir.length()-1);
   if (h == INVALID_HANDLE_VALUE)
     return;
 
   do {
-    if (0 == strcmp(fd.cFileName, ".") || 0 == strcmp(fd.cFileName, ".."))
+    if (0 == _tcscmp/*strcmp*/(fd.cFileName, TEXT(".")) || 0 == _tcscmp/*strcmp*/(fd.cFileName, TEXT("..")))
       continue;
     if (fd.cFileName[0] == '.' ||
         (FILE_ATTRIBUTE_HIDDEN & fd.dwFileAttributes)) // ignore invisible files/folders
       continue;
 
     if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-      build_file_list_in_imp(dir + fd.cFileName, l);
-	else
-      l->push_back(dir + fd.cFileName);
+      build_file_list_in_imp(dir + native_char_array_to_utf8_string(fd.cFileName), l);
+    else
+      l->push_back(dir + native_char_array_to_utf8_string(fd.cFileName));
   } while (::FindNextFile(h, &fd));
   ::FindClose(h);
 #else
@@ -96,7 +287,7 @@ build_file_list_in_imp(string dir, list<string>* l)
       continue;
 
     if (d->d_type == DT_DIR)
-      build_file_list_in_imp(dir + name, l);
+      /* dump_utf8_as_utf16(name), */ build_file_list_in_imp(dir + name, l);
     else
       l->push_back(dir + name);
   }
@@ -161,6 +352,28 @@ CommandLine::get(void)
 }
 
 
+//	static
+string
+CommandLine::FileOrPathForCout(const string& path)
+{
+  CommandLine* cl = get();
+  if (!cl) {
+    cerr << "error: missing cmd line - this should not happen!" << endl;
+    return string(); // something is wrong
+  }
+
+  const string& bd = cl->GetBaseDirectory();
+  if (bd.empty()) {
+    string parent_dir;
+    string file_name;
+    DiskFile::SplitFilename(path, parent_dir, file_name);
+
+    return file_name;
+  }
+  return path;
+}
+
+
 CommandLine::CommandLine(void)
 : operation(opNone)
 , version(verUnknown)
@@ -208,7 +421,7 @@ void CommandLine::usage(void)
     "\n"
     "  -b<n>  : Set the Block-Count\n"
     "  -s<n>  : Set the Block-Size (Don't use both -b and -s)\n"
-    "  -r<n>  : Level of Redundancy (%%)\n"
+    "  -r<n>  : Level of Redundancy (%)\n"
     "  -c<n>  : Recovery block count (Don't use both -r and -c)\n"
     "  -f<n>  : First Recovery-Block-Number\n"
     "  -u     : Uniform recovery file sizes\n"
@@ -218,17 +431,17 @@ void CommandLine::usage(void)
     "  -v [-v]: Be more verbose\n"
     "  -q [-q]: Be more quiet (-q -q gives silence)\n"
 #if WANT_CONCURRENT
-	"  -t<+|->: Threaded processing: -t+ to use multiple cores/CPUs, -t- to use a single core/CPU\n"
+    "  -t<+|->: Threaded processing: -t+ to use multiple cores/CPUs, -t- to use a single core/CPU\n"
 #endif
-	// 2007/10/21
-	"  -d<dir>: root directory for paths to be put in par2 files OR root directory for files to repair from par2 files\n"
+    // 2007/10/21
+    "  -d<dir>: root directory for paths to be put in par2 files OR root directory for files to repair from par2 files\n"
     "  --     : Treat all remaining CommandLine as filenames\n"
     "\n"
     "If you wish to create par2 files for a single source file, you may leave\n"
     "out the name of the par2 file from the command line.\n";
 }
 
-bool CommandLine::Parse(int argc, char *argv[])
+bool CommandLine::Parse(int argc, TCHAR *argv[])
 {
   if (argc<1)
   {
@@ -237,7 +450,7 @@ bool CommandLine::Parse(int argc, char *argv[])
 
   // Split the program name into path and filename
   string path, name;
-  DiskFile::SplitFilename(argv[0], path, name);
+  DiskFile::SplitFilename(native_char_array_to_utf8_string(argv[0]), path, name);
   argc--;
   argv++;
 
@@ -273,15 +486,15 @@ bool CommandLine::Parse(int argc, char *argv[])
     switch (tolower(argv[0][0]))
     {
     case 'c':
-      if (argv[0][1] == 0 || 0 == stricmp(argv[0], "create"))
+      if (argv[0][1] == 0 || 0 == stricmp(native_char_array_to_utf8_char_array(argv[0]), "create"))
         operation = opCreate;
       break;
     case 'v':
-      if (argv[0][1] == 0 || 0 == stricmp(argv[0], "verify"))
+      if (argv[0][1] == 0 || 0 == stricmp(native_char_array_to_utf8_char_array(argv[0]), "verify"))
         operation = opVerify;
       break;
     case 'r':
-      if (argv[0][1] == 0 || 0 == stricmp(argv[0], "repair"))
+      if (argv[0][1] == 0 || 0 == stricmp(native_char_array_to_utf8_char_array(argv[0]), "repair"))
         operation = opRepair;
       break;
     }
@@ -325,7 +538,7 @@ bool CommandLine::Parse(int argc, char *argv[])
               return false;
             }
             
-            char *p = &argv[0][2];
+            TCHAR *p = &argv[0][2];
             while (blockcount <= 3276 && *p && isdigit(*p))
             {
               blockcount = blockcount * 10 + (*p - '0');
@@ -357,7 +570,7 @@ bool CommandLine::Parse(int argc, char *argv[])
               return false;
             }
 
-            char *p = &argv[0][2];
+            TCHAR *p = &argv[0][2];
             while (blocksize <= 429496729 && *p && isdigit(*p))
             {
               blocksize = blocksize * 10 + (*p - '0');
@@ -394,7 +607,7 @@ bool CommandLine::Parse(int argc, char *argv[])
               return false;
             }
 
-            char *p = &argv[0][2];
+            TCHAR *p = &argv[0][2];
             while (redundancy <= 10 && *p && isdigit(*p))
             {
               redundancy = redundancy * 10 + (*p - '0');
@@ -432,7 +645,7 @@ bool CommandLine::Parse(int argc, char *argv[])
               return false;
             }
 
-            char *p = &argv[0][2];
+            TCHAR *p = &argv[0][2];
             while (recoveryblockcount <= 32768 && *p && isdigit(*p))
             {
               recoveryblockcount = recoveryblockcount * 10 + (*p - '0');
@@ -465,7 +678,7 @@ bool CommandLine::Parse(int argc, char *argv[])
               return false;
             }
 
-            char *p = &argv[0][2];
+            TCHAR *p = &argv[0][2];
             while (firstblock <= 3276 && *p && isdigit(*p))
             {
               firstblock = firstblock * 10 + (*p - '0');
@@ -556,7 +769,7 @@ bool CommandLine::Parse(int argc, char *argv[])
               return false;
             }
 
-            char *p = &argv[0][2];
+            TCHAR *p = &argv[0][2];
             while (*p && isdigit(*p))
             {
               recoveryfilecount = recoveryfilecount * 10 + (*p - '0');
@@ -578,7 +791,7 @@ bool CommandLine::Parse(int argc, char *argv[])
               return false;
             }
 
-            char *p = &argv[0][2];
+            TCHAR *p = &argv[0][2];
             while (*p && isdigit(*p))
             {
               memorylimit = memorylimit * 10 + (*p - '0');
@@ -641,13 +854,13 @@ bool CommandLine::Parse(int argc, char *argv[])
           break;
 
         case 'd': {
-          base_directory = DiskFile::GetCanonicalPathname(2 + argv[0]);
+          base_directory = DiskFile::GetCanonicalPathname(native_char_array_to_utf8_string(2 + argv[0]));
           if (base_directory.empty()) {
-			cerr << "base directory for hierarchy support must specify a folder" << endl;
-			return false;
+            cerr << "base directory for hierarchy support must specify a folder" << endl;
+            return false;
           } else if (operation == opCreate && !is_existing_folder(base_directory)) {
-			cerr << "the base directory (" << base_directory << ") for hierarchy support must specify an accessible and existing folder" << endl;
-			return false;
+            cerr << "the base directory (" << base_directory << ") for hierarchy support must specify an accessible and existing folder" << endl;
+            return false;
           }
           if (base_directory[base_directory.length()-1] != OS_SEPARATOR)
             base_directory += OS_SEPARATOR;
@@ -693,18 +906,18 @@ bool CommandLine::Parse(int argc, char *argv[])
 
         // If the argument includes wildcard characters, 
         // search the disk for matching files
-        if (strchr(argv[0], '*') || strchr(argv[0], '?'))
+        if (_tcschr/*strchr*/(argv[0], '*') || _tcschr/*strchr*/(argv[0], '?'))
         {
           string path;
           string name;
-          DiskFile::SplitFilename(argv[0], path, name);
+          DiskFile::SplitFilename(native_char_array_to_utf8_string(argv[0]), path, name);
 
           filenames = DiskFile::FindFiles(path, name);
-        } else if (is_existing_folder(argv[0])) {
-          filenames = build_file_list_in(argv[0]);
+        } else if (is_existing_folder(native_char_array_to_utf8_string(argv[0]))) {
+          filenames = build_file_list_in(native_char_array_to_utf8_string(argv[0]).c_str());
         } else {
           filenames = new list<string>;
-          filenames->push_back(argv[0]);
+          filenames->push_back(native_char_array_to_utf8_string(argv[0]));
         }
 
         for (list<string>::iterator fn = filenames->begin(); fn != filenames->end(); ++fn)
@@ -876,7 +1089,7 @@ bool CommandLine::Parse(int argc, char *argv[])
         // assume that you wish to create par2 files for it.
 
         u64 filesize = 0;
-	if (DiskFile::FileExists(parfilename) &&
+        if (DiskFile::FileExists(parfilename) &&
             (filesize = DiskFile::GetFileSize(parfilename)) > 0)
         {
           extrafiles.push_back(ExtraFile(parfilename, filesize));

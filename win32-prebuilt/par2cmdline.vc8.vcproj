@@ -63,7 +63,7 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="..\tbb20_20070927oss_src\ia32\vc8\lib\tbb.lib"
+				AdditionalDependencies="..\tbb20_20071030oss_win\ia32\vc7.1\lib\tbb.lib $(InputDir)\CxxFrameHandler3_to_CxxFrameHandler.obj"
 				OutputFile="$(OutDir)/par2.exe"
 				LinkIncremental="2"
 				GenerateDebugInformation="true"
@@ -146,7 +146,7 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="..\tbb20_20070927oss_src\ia32\vc8\lib\tbb.lib"
+				AdditionalDependencies="..\tbb20_20071030oss_win\ia32\vc7.1\lib\tbb.lib $(InputDir)\CxxFrameHandler3_to_CxxFrameHandler.obj"
 				OutputFile="$(OutDir)/par2.exe"
 				LinkIncremental="1"
 				GenerateDebugInformation="true"

@@ -17,7 +17,8 @@
 //  along with this program; if not, write to the Free Software
 //  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 //
-//  Modifications for concurrent processing Copyright (c) 2007 Vincent Tan.
+//  Modifications for concurrent processing, Unicode support, and hierarchial
+//  directory support are Copyright (c) 2007-2008 Vincent Tan.
 //  Search for "#if WANT_CONCURRENT" for concurrent code.
 //  Concurrent processing utilises Intel Thread Building Blocks 2.0,
 //  Copyright (c) 2007 Intel Corp.
@@ -35,12 +36,14 @@ class CommandLine
 
 public:
   static CommandLine* get(void);
+  static string FileOrPathForCout(const string& path);
+
 
   CommandLine(void);
   ~CommandLine(void);
 
   // Parse the supplied command line arguments. 
-  bool Parse(int argc, char *argv[]);
+  bool Parse(int argc, TCHAR *argv[]);
 
   // Display details of the correct format for command line parameters.
   static void usage(void);
