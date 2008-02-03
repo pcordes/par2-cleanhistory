@@ -45,7 +45,7 @@ http://www.chuchusoft.com/par2_tbb
 The Windows version is a 32-bit Windows build of the concurrent version of
 par2cmdline 0.4. It is distributed as an executable (par2.exe) along
 with the required Intel Thread Building Blocks 2.0 library (tbb.dll)
-which comes from the tbb20_20071030oss_win.tar.gz distribution.
+which comes from the tbb20_20080115oss_win.tar.gz distribution.
 
 The par2.exe and tbb.dll files included in this distribution require
 version 7.1 of the Microsoft C runtime libraries, which are probably
@@ -93,6 +93,19 @@ To uninstall, delete the par2 and libtbb.so files along with any
 files from the distribution folder.
 
 
+--- Installing the pre-built FreeBSD version ---
+
+
+Both the 32-bit and 64-bit binaries were built using RELEASE 6.2 of FreeBSD.
+
+To install: copy libtbb.so to /usr/local/lib, copy par2 to a convenient
+location, eg, /usr/local/bin, then remove the distribution directory. You
+will need superuser permission to copy files to the /usr/local area.
+
+To uninstall, delete the par2 and libtbb.so files along with any
+files from the distribution folder.
+
+
 --- Building and installing on UNIX type systems ---
 
 
@@ -109,11 +122,11 @@ the tbb<version>oss_src/build directory. To manually modify the Makefile:
 
   In `Makefile.am', go to line 59 (Darwin/Mac OS X):
 
-AM_CXXFLAGS = -Wall -I../tbb20_20071030oss_src/include -gfull -O3 -fvisibility=hidden -fvisibility-inlines-hidden
+AM_CXXFLAGS = -Wall -I../tbb20_20080115oss_src/include -gfull -O3 -fvisibility=hidden -fvisibility-inlines-hidden
 
   or line 63 (other POSIX systems):
 
-AM_CXXFLAGS = -Wall -I../tbb20_20071030oss_src/include
+AM_CXXFLAGS = -Wall -I../tbb20_20080115oss_src/include
 
 and modify the path to wherever your extracted Intel TBB files are. Note that it
 should point at the `include' directory inside the main tbb directory.
@@ -139,6 +152,9 @@ LDADD = -lstdc++ -ltbb -L.
 The Mac OS X distribution of this project is built using a relative-path
 for the dynamic library. Please see the next section for more information.
 
+The GNU/Linux distribution of this project is built using a relative-path
+for the dynamic library (by passing the "-R $ORIGIN" option to the linker).
+
 
 --- Building and installing on Mac OS X systems ---
 
@@ -159,7 +175,7 @@ par2 files when those files resided on a SMB server (ie, a shared folder on
 a Windows computer). Combining the mixed-OS executables solves both of these
 problems (see the 20080116 version release notes below for details).
 
-The libtbb.dylib file is built from the TBB 2.0 tbb20_20071030oss_src.tar.gz
+The libtbb.dylib file is built from the TBB 2.0 tbb20_20080115oss_src.tar.gz
 distribution. It was built for both the x86 and x86_64 architectures and will
 therefore run on all 32-bit x86 hardware (such as the Intel Core Duo CPU) as
 well as 64-bit x86_64 hardware (such as Intel Core 2 Duo and Athlon-64 CPUs).
@@ -171,8 +187,7 @@ version included in this distribution does not require that it be installed,
 and is therefore usable "out of the box". To implement this change, the
 macos.gcc.inc file was modified with this line:
 
-LIB_LINK_FLAGS = -dynamiclib -Wl,-exported_symbols_list,$(TBB.DEF) \
--install_name @executable_path/$@
+LIB_LINK_FLAGS = -dynamiclib -Wl,-install_name,@executable_path/$@
 
 
 The par2 executable has been symbol stripped (using the 'strip' command line
@@ -214,6 +229,29 @@ legacy code for XP and Windows 2000" folder. You will also need to copy
 the CxxFrameHandler3_to_CxxFrameHandler.obj file to your
 par2cmdline-0.4-tbb-<version> folder.
 
+
+
+--- Building and installing on FreeBSD ---
+
+
+Instructions:
+
+[1] build and install TBB
+- extract TBB from the source archive.
+- on a command line, execute:
+
+  cp -r <TBB-src>/include/tbb /usr/local/include
+  cp <TBB-src>/src/tbb/tbb_misc.h /usr/local/include/tbb
+  cd <TBB-src> && /usr/local/bin/gmake
+  # change the next line to match your machine's configuration:
+  cp <TBB-src>/build/FreeBSD_em64t_gcc_cc3.4.6_kernel6.2_release/libtbb.so /usr/local/lib
+
+[2] build and install par2cmdline-0.4-tbb
+- extract and build par2cmdline-0.4-tbb using tar, ./configure, and make
+- copy built binary to where you want to install it (eg, /usr/local/bin)
+
+[3] cleanup
+- remove <TBB-src> and par2cmdline-0.4-tbb source directories
 
 
 --- Technical Details ---
@@ -309,8 +347,22 @@ will become I/O bound instead of CPU bound. Computers with 1 to 2GB of RAM shoul
 enough memory to not be I/O bound when creating or repairing parity/data files.
 
 
---- About this version ---
+--- Version History ---
 
+
+The changes in the 20080203 version are:
+
+- the Linux version wasn't working because it was not built correctly: the
+  reedsolomon-inner-i386-posix.s was using an incorrect include directive. Fixed.
+  *** WARNING ***
+  A consequence of this error is that par2 files created with the 20080116 Linux
+  binary contain incorrect repair data and therefore cannot be used to repair
+  data files. The par2 files will need to be created again using either the
+  20071128 build of the Linux binary or this build of it.
+  *** WARNING ***
+- tweaked the Makefile and par2cmdline.h to allow for building under FreeBSD.
+- first release of 32-bit and 64-bit binaries for FreeBSD (built under RELEASE 6.2).
+- updated to use the 20080115 version of the Intel TBB library.
 
 The changes in the 20080116 version are:
 
@@ -545,7 +597,7 @@ The changes in the 20070831 version are:
 
 
 Vincent Tan.
-January 16, 2008.
+February 3, 2008.
 
 //
 //  Modifications for concurrent processing, Unicode support, and hierarchial

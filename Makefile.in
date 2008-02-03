@@ -114,8 +114,10 @@ par2_SOURCES = par2cmdline.cpp par2cmdline.h \
 
 
 LDADD = -lstdc++ -ltbb -L.
-@PLATFORM_DARWIN_TRUE@AM_CXXFLAGS = -Wall -I../tbb20_20071030oss_src/include -gfull -O3 -fvisibility=hidden -fvisibility-inlines-hidden
-@PLATFORM_LINUX_TRUE@AM_CXXFLAGS = -Wall -I../tbb20_20071030oss_src/include
+@PLATFORM_DARWIN_TRUE@AM_CXXFLAGS = -Wall -I../tbb20_20080115oss_src/include -I../tbb20_20080115oss_src/src -gfull -O3 -fvisibility=hidden -fvisibility-inlines-hidden
+@PLATFORM_FREEBSD_TRUE@AM_CXXFLAGS = -Wall -I/usr/local/include
+@PLATFORM_LINUX_TRUE@AM_CXXFLAGS = -Wall -I../tbb20_20080115oss_src/include -I../tbb20_20080115oss_src/src
+@PLATFORM_FREEBSD_TRUE@AM_LDFLAGS = -L/usr/local/lib
 @PLATFORM_LINUX_TRUE@AM_LDFLAGS = '-Wl,-R,$$ORIGIN'
 
 EXTRA_DIST = PORTING ROADMAP par2cmdline.sln par2cmdline.vcproj \

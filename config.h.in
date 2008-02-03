@@ -111,6 +111,9 @@
 /* define if building for Darwin / MacOS X */
 #undef PLATFORM_DARWIN
 
+/* define if building for FreeBSD */
+#undef PLATFORM_FREEBSD
+
 /* define if building for Linux */
 #undef PLATFORM_LINUX
 

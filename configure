@@ -311,7 +311,7 @@ ac_includes_default="\
 # include <unistd.h>
 #endif"
 
-ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os INSTALL_PROGRAM INSTALL_SCRIPT INSTALL_DATA PACKAGE VERSION ACLOCAL AUTOCONF AUTOMAKE AUTOHEADER MAKEINFO AMTAR install_sh STRIP ac_ct_STRIP INSTALL_STRIP_PROGRAM AWK SET_MAKE CXX CXXFLAGS LDFLAGS CPPFLAGS ac_ct_CXX EXEEXT OBJEXT DEPDIR am__include am__quote AMDEP_TRUE AMDEP_FALSE AMDEPBACKSLASH CXXDEPMODE CC CFLAGS ac_ct_CC CCDEPMODE CCAS CCASFLAGS AMD64_TRUE AMD64_FALSE X86MMX_TRUE X86MMX_FALSE X86CPU_TRUE X86CPU_FALSE PLATFORM_LINUX_TRUE PLATFORM_LINUX_FALSE PLATFORM_DARWIN_TRUE PLATFORM_DARWIN_FALSE CPP EGREP LIBOBJS LTLIBOBJS'
+ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os INSTALL_PROGRAM INSTALL_SCRIPT INSTALL_DATA PACKAGE VERSION ACLOCAL AUTOCONF AUTOMAKE AUTOHEADER MAKEINFO AMTAR install_sh STRIP ac_ct_STRIP INSTALL_STRIP_PROGRAM AWK SET_MAKE CXX CXXFLAGS LDFLAGS CPPFLAGS ac_ct_CXX EXEEXT OBJEXT DEPDIR am__include am__quote AMDEP_TRUE AMDEP_FALSE AMDEPBACKSLASH CXXDEPMODE CC CFLAGS ac_ct_CC CCDEPMODE CCAS CCASFLAGS AMD64_TRUE AMD64_FALSE X86MMX_TRUE X86MMX_FALSE X86CPU_TRUE X86CPU_FALSE PLATFORM_LINUX_TRUE PLATFORM_LINUX_FALSE PLATFORM_DARWIN_TRUE PLATFORM_DARWIN_FALSE PLATFORM_FREEBSD_TRUE PLATFORM_FREEBSD_FALSE CPP EGREP LIBOBJS LTLIBOBJS'
 ac_subst_files=''
 
 # Initialize some variables set by options.
@@ -3587,6 +3587,16 @@ fi
 
 
 
+if false; then
+  PLATFORM_FREEBSD_TRUE=
+  PLATFORM_FREEBSD_FALSE='#'
+else
+  PLATFORM_FREEBSD_TRUE='#'
+  PLATFORM_FREEBSD_FALSE=
+fi
+
+
+
 		;;
 	*-*-darwin*)
 		sys_darwin=true
@@ -3608,6 +3618,51 @@ if true; then
 else
   PLATFORM_DARWIN_TRUE='#'
   PLATFORM_DARWIN_FALSE=
+fi
+
+
+
+if false; then
+  PLATFORM_FREEBSD_TRUE=
+  PLATFORM_FREEBSD_FALSE='#'
+else
+  PLATFORM_FREEBSD_TRUE='#'
+  PLATFORM_FREEBSD_FALSE=
+fi
+
+
+
+		;;
+	*-*-freebsd*)
+		sys_freebsd=true
+
+
+if false; then
+  PLATFORM_LINUX_TRUE=
+  PLATFORM_LINUX_FALSE='#'
+else
+  PLATFORM_LINUX_TRUE='#'
+  PLATFORM_LINUX_FALSE=
+fi
+
+
+
+if false; then
+  PLATFORM_DARWIN_TRUE=
+  PLATFORM_DARWIN_FALSE='#'
+else
+  PLATFORM_DARWIN_TRUE='#'
+  PLATFORM_DARWIN_FALSE=
+fi
+
+
+
+if true; then
+  PLATFORM_FREEBSD_TRUE=
+  PLATFORM_FREEBSD_FALSE='#'
+else
+  PLATFORM_FREEBSD_TRUE='#'
+  PLATFORM_FREEBSD_FALSE=
 fi
 
 
@@ -6793,6 +6848,13 @@ echo "$as_me: error: conditional \"PLATFORM_DARWIN\" was never defined.
 Usually this means the macro was only invoked conditionally." >&2;}
    { (exit 1); exit 1; }; }
 fi
+if test -z "${PLATFORM_FREEBSD_TRUE}" && test -z "${PLATFORM_FREEBSD_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"PLATFORM_FREEBSD\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+echo "$as_me: error: conditional \"PLATFORM_FREEBSD\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
 if test -z "${PLATFORM_LINUX_TRUE}" && test -z "${PLATFORM_LINUX_FALSE}"; then
   { { echo "$as_me:$LINENO: error: conditional \"PLATFORM_LINUX\" was never defined.
 Usually this means the macro was only invoked conditionally." >&5
@@ -6804,6 +6866,34 @@ if test -z "${PLATFORM_DARWIN_TRUE}" && test -z "${PLATFORM_DARWIN_FALSE}"; then
   { { echo "$as_me:$LINENO: error: conditional \"PLATFORM_DARWIN\" was never defined.
 Usually this means the macro was only invoked conditionally." >&5
 echo "$as_me: error: conditional \"PLATFORM_DARWIN\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
+if test -z "${PLATFORM_FREEBSD_TRUE}" && test -z "${PLATFORM_FREEBSD_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"PLATFORM_FREEBSD\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+echo "$as_me: error: conditional \"PLATFORM_FREEBSD\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
+if test -z "${PLATFORM_LINUX_TRUE}" && test -z "${PLATFORM_LINUX_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"PLATFORM_LINUX\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+echo "$as_me: error: conditional \"PLATFORM_LINUX\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
+if test -z "${PLATFORM_DARWIN_TRUE}" && test -z "${PLATFORM_DARWIN_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"PLATFORM_DARWIN\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+echo "$as_me: error: conditional \"PLATFORM_DARWIN\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
+if test -z "${PLATFORM_FREEBSD_TRUE}" && test -z "${PLATFORM_FREEBSD_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"PLATFORM_FREEBSD\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+echo "$as_me: error: conditional \"PLATFORM_FREEBSD\" was never defined.
 Usually this means the macro was only invoked conditionally." >&2;}
    { (exit 1); exit 1; }; }
 fi
@@ -7395,6 +7485,8 @@ s,@PLATFORM_LINUX_TRUE@,$PLATFORM_LINUX_TRUE,;t t
 s,@PLATFORM_LINUX_FALSE@,$PLATFORM_LINUX_FALSE,;t t
 s,@PLATFORM_DARWIN_TRUE@,$PLATFORM_DARWIN_TRUE,;t t
 s,@PLATFORM_DARWIN_FALSE@,$PLATFORM_DARWIN_FALSE,;t t
+s,@PLATFORM_FREEBSD_TRUE@,$PLATFORM_FREEBSD_TRUE,;t t
+s,@PLATFORM_FREEBSD_FALSE@,$PLATFORM_FREEBSD_FALSE,;t t
 s,@CPP@,$CPP,;t t
 s,@EGREP@,$EGREP,;t t
 s,@LIBOBJS@,$LIBOBJS,;t t

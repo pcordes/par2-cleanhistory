@@ -34,4 +34,4 @@
 	.text
 ReedSolomonInnerLoop:
 
-#include "reedsolomon-inner-i386.s"
+.include "reedsolomon-inner-i386.s"

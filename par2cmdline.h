@@ -346,7 +346,7 @@ using namespace std;
   // in sequential order; in effect, a FIFO queue is being implemented.
 
   #include "tbb/parallel_while.h"
-  #include "../src/tbb/tbb_misc.h" // for tbb::DetectNumberOfWorkers(); it's a pity that tbb_misc.h is not in <tbb_home>/include/tbb/
+  #include "tbb/tbb_misc.h" // for tbb::DetectNumberOfWorkers(); it's a pity that tbb_misc.h is not in <tbb_home>/include/tbb/
 
   // === begin generic classes for use with parallel_while() ===
 
@@ -443,7 +443,7 @@ using namespace std;
                   incrementing_parallel_while_with_max> >& w,
     ITEM* item)
   {
-    const size_t n = item->is_first() ? tbb::DetectNumberOfWorkers() : 1;
+    const size_t n = item->is_first() ? tbb::internal::DetectNumberOfWorkers() : 1;
 
     bool res = false;
     std::pair<bool, size_t> pr(w.increment_next_i());
