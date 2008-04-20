@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="Windows-1252"?>
 <VisualStudioProject
 	ProjectType="Visual C++"
-	Version="8.00"
+	Version="9.00"
 	Name="par2cmdline"
 	ProjectGUID="{D0A94F83-495E-4FB2-AC33-9A3EC2CC263B}"
 	RootNamespace="par2cmdline"
 	Keyword="Win32Proj"
+	TargetFrameworkVersion="131072"
 	>
 	<Platforms>
 		<Platform
@@ -41,7 +42,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories="..\tbb20_20071030oss_src\include;..\tbb20_20071030oss_src\src"
+				AdditionalIncludeDirectories="..\tbb20_017oss_src\include;..\tbb20_017oss_src\src"
 				PreprocessorDefinitions="WIN32;_DEBUG;_CONSOLE;PACKAGE=\&quot;par2cmdline\&quot;;VERSION=\&quot;0.4\&quot;"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
@@ -49,7 +50,6 @@
 				UsePrecompiledHeader="0"
 				PrecompiledHeaderThrough="par2cmdline.h"
 				WarningLevel="3"
-				Detect64BitPortabilityProblems="true"
 				DebugInformationFormat="4"
 			/>
 			<Tool
@@ -63,11 +63,13 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="..\tbb20_20070927oss_src\ia32\vc8\lib\tbb.lib"
+				AdditionalDependencies="..\tbb20_017oss_src\ia32\vc7.1\lib\tbb.lib $(InputDir)\CxxFrameHandler3_to_CxxFrameHandler.obj $(NOINHERIT)"
 				OutputFile="$(OutDir)/par2.exe"
 				LinkIncremental="2"
 				GenerateDebugInformation="true"
 				SubSystem="1"
+				RandomizedBaseAddress="1"
+				DataExecutionPrevention="0"
 				TargetMachine="1"
 			/>
 			<Tool
@@ -89,9 +91,6 @@
 				Name="VCAppVerifierTool"
 			/>
 			<Tool
-				Name="VCWebDeploymentTool"
-			/>
-			<Tool
 				Name="VCPostBuildEventTool"
 			/>
 		</Configuration>
@@ -102,6 +101,7 @@
 			ConfigurationType="1"
 			InheritedPropertySheets="$(VCInstallDir)VCProjectDefaults\UpgradeFromVC71.vsprops"
 			CharacterSet="1"
+			WholeProgramOptimization="1"
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
@@ -120,19 +120,17 @@
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
-				Optimization="2"
-				InlineFunctionExpansion="2"
-				FavorSizeOrSpeed="1"
-				OmitFramePointers="true"
-				AdditionalIncludeDirectories="..\tbb20_20071030oss_src\include;..\tbb20_20071030oss_src\src"
+				AdditionalOptions="/MP"
+				Optimization="3"
+				AdditionalIncludeDirectories="..\tbb20_017oss_src\include;..\tbb20_017oss_src\src"
 				PreprocessorDefinitions="WIN32;NDEBUG;_CONSOLE;PACKAGE=\&quot;par2cmdline\&quot;;VERSION=\&quot;0.4\&quot;"
 				StringPooling="true"
 				RuntimeLibrary="2"
-				EnableFunctionLevelLinking="true"
+				BufferSecurityCheck="false"
+				RuntimeTypeInfo="false"
 				UsePrecompiledHeader="0"
 				PrecompiledHeaderThrough="par2cmdline.h"
 				WarningLevel="3"
-				Detect64BitPortabilityProblems="true"
 				DebugInformationFormat="3"
 			/>
 			<Tool
@@ -146,9 +144,8 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="..\tbb20_20070927oss_src\ia32\vc8\lib\tbb.lib"
+				AdditionalDependencies="..\tbb20_017oss_src\ia32\vc7.1\lib\tbb.lib $(InputDir)\CxxFrameHandler3_to_CxxFrameHandler.obj $(NOINHERIT)"
 				OutputFile="$(OutDir)/par2.exe"
-				LinkIncremental="1"
 				GenerateDebugInformation="true"
 				SubSystem="1"
 				OptimizeReferences="2"
@@ -172,9 +169,6 @@
 			/>
 			<Tool
 				Name="VCAppVerifierTool"
-			/>
-			<Tool
-				Name="VCWebDeploymentTool"
 			/>
 			<Tool
 				Name="VCPostBuildEventTool"

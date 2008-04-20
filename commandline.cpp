@@ -25,12 +25,22 @@
 
 #include "par2cmdline.h"
 
+#include <set>
+
 #ifdef _MSC_VER
 #ifdef _DEBUG
 #undef THIS_FILE
 static char THIS_FILE[]=__FILE__;
 #define new DEBUG_NEW
 #endif
+#endif
+
+#if defined(WIN32) || defined(__APPLE_CC__)
+  struct less_stri {
+    bool operator()(const string& lhs, const string& rhs) const {
+      return stricmp(lhs.c_str(), rhs.c_str()) < 0;
+    }
+  };
 #endif
 
 #ifdef WIN32
@@ -108,7 +118,7 @@ static char THIS_FILE[]=__FILE__;
       i = ::WideCharToMultiByte(cp,      //    code page
             0,                           //    performance and mapping flags
             utf16.c_str(),               //    wide-character string
-			utf16.length(),              //    number of chars in string
+            utf16.length(),              //    number of chars in string
             NULL,                        //    buffer for new string
             0,                           //    size of buffer in bytes
             NULL, NULL);
@@ -125,7 +135,7 @@ static char THIS_FILE[]=__FILE__;
       j = ::WideCharToMultiByte(cp,      //    code page
             0,                           //    performance and mapping flags
             utf16.c_str(),               //    wide-character string
-			utf16.length(),              //    number of chars in string
+            utf16.length(),              //    number of chars in string
             &res[0],                     //    buffer for new string
             i,                           //    size of buffer in bytes
             NULL, NULL);
@@ -393,7 +403,7 @@ CommandLine::CommandLine(void)
 , largestsourcesize(0)
 , memorylimit(0)
 #if WANT_CONCURRENT
-, useconcurrentprocessing(true) // whether to process everything serially or concurrently
+, concurrent_processing_level(ALL_CONCURRENT) // whether to process everything serially or concurrently
 #endif
 {
   sInstance = this;
@@ -431,7 +441,10 @@ void CommandLine::usage(void)
     "  -v [-v]: Be more verbose\n"
     "  -q [-q]: Be more quiet (-q -q gives silence)\n"
 #if WANT_CONCURRENT
-    "  -t<+|->: Threaded processing: -t+ to use multiple cores/CPUs, -t- to use a single core/CPU\n"
+    "  -t<+|0|->: Threaded processing. The options are:\n"
+	"     -t+ to checksum and create/repair concurrently - uses multiple threads - good for hard disk files - [default]\n"
+	"     -t0 to checksum serially but create/repair concurrently - good for slow media such as CDs/DVDs\n"
+	"     -t- to checksum/create/repair serially - uses a single thread - good for testing this program\n"
 #endif
     // 2007/10/21
     "  -d<dir>: root directory for paths to be put in par2 files OR root directory for files to repair from par2 files\n"
@@ -508,6 +521,11 @@ bool CommandLine::Parse(int argc, TCHAR *argv[])
   }
 
   bool options = true;
+#if defined(WIN32) || defined(__APPLE_CC__)
+  std::set<string, less_stri>  accepted_filenames;
+#else
+  std::set<string>  accepted_filenames;
+#endif
 
   while (argc>0)
   {
@@ -872,13 +890,16 @@ bool CommandLine::Parse(int argc, TCHAR *argv[])
           {
             switch (argv[0][2]) {
             case '-':
-              useconcurrentprocessing = false;
+              concurrent_processing_level = ALL_SERIAL;
+              break;
+            case '0':
+              concurrent_processing_level = CHECKSUM_SERIALLY_BUT_PROCESS_CONCURRENTLY;
               break;
             case '+':
-              useconcurrentprocessing = true;
+              concurrent_processing_level = ALL_CONCURRENT;
               break;
             default:
-              cerr << "Expected -t+ (use multiple cores) or -t- (use single core)." << endl;
+              cerr << "Expected -t+ (use multiple cores) or -t0 (checksum serially, process concurrently) or -t- (use single core)." << endl;
               return false;
             }
           }
@@ -924,6 +945,10 @@ bool CommandLine::Parse(int argc, TCHAR *argv[])
         {
           // Convert filename from command line into a full path + filename
           string filename = DiskFile::GetCanonicalPathname(*fn);
+
+          // filename can be empty if the realpath() API in GetCanonicalPathname() returns NULL
+          if (filename.empty())
+            filename = *fn;
 
           // If this is the first file on the command line, then it
           // is the main PAR2 file.
@@ -1011,15 +1036,18 @@ bool CommandLine::Parse(int argc, TCHAR *argv[])
             // would stop with an error message. This was not practical, for example in
             // a directory with files appearing and disappearing (an active download directory).
             // So the new rule is: when a specified file doesn't exist, it is silently skipped.
-            if (!DiskFile::FileExists(filename))
-            {
+            if (!DiskFile::FileExists(filename)) {
               cout << "Ignoring non-existent source file: " << filename << endl;
             } else {
               u64 filesize = DiskFile::GetFileSize(filename);
 
-              // Ignore all 0 byte files
-              if (filesize > 0)
-              {
+              // Ignore all 0 byte files and duplicate file names
+              if (filesize == 0)
+                cout << "Skipping 0 byte file: " << filename << endl;
+              else if (accepted_filenames.end() != accepted_filenames.find(filename))
+                cout << "Skipping duplicate filename: " << filename << endl;
+              else if (accepted_filenames.end() == accepted_filenames.find(filename)) {
+                accepted_filenames.insert(filename);
                 extrafiles.push_back(ExtraFile(filename, filesize));
 
                 // track the total size of the source files and how
@@ -1027,10 +1055,6 @@ bool CommandLine::Parse(int argc, TCHAR *argv[])
                 totalsourcesize += filesize;
                 if (largestsourcesize < filesize)
                   largestsourcesize = filesize;
-              }
-              else
-              {
-                cout << "Skipping 0 byte file: " << filename << endl;
               }
             }
           } // if

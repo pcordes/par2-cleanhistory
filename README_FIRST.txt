@@ -45,7 +45,7 @@ http://www.chuchusoft.com/par2_tbb
 The Windows version is a 32-bit Windows build of the concurrent version of
 par2cmdline 0.4. It is distributed as an executable (par2.exe) along
 with the required Intel Thread Building Blocks 2.0 library (tbb.dll)
-which comes from the tbb20_20080115oss_win.tar.gz distribution.
+which comes from the tbb20_017oss_win.tar.gz distribution.
 
 The par2.exe and tbb.dll files included in this distribution require
 version 7.1 of the Microsoft C runtime libraries, which are probably
@@ -122,11 +122,11 @@ the tbb<version>oss_src/build directory. To manually modify the Makefile:
 
   In `Makefile.am', go to line 59 (Darwin/Mac OS X):
 
-AM_CXXFLAGS = -Wall -I../tbb20_20080115oss_src/include -gfull -O3 -fvisibility=hidden -fvisibility-inlines-hidden
+AM_CXXFLAGS = -Wall -I../tbb20_017oss_src/include -gfull -O3 -fvisibility=hidden -fvisibility-inlines-hidden
 
   or line 63 (other POSIX systems):
 
-AM_CXXFLAGS = -Wall -I../tbb20_20080115oss_src/include
+AM_CXXFLAGS = -Wall -I../tbb20_017oss_src/include
 
 and modify the path to wherever your extracted Intel TBB files are. Note that it
 should point at the `include' directory inside the main tbb directory.
@@ -175,7 +175,7 @@ par2 files when those files resided on a SMB server (ie, a shared folder on
 a Windows computer). Combining the mixed-OS executables solves both of these
 problems (see the 20080116 version release notes below for details).
 
-The libtbb.dylib file is built from the TBB 2.0 tbb20_20080115oss_src.tar.gz
+The libtbb.dylib file is built from the TBB 2.0 tbb20_017oss_src.tar.gz
 distribution. It was built for both the x86 and x86_64 architectures and will
 therefore run on all 32-bit x86 hardware (such as the Intel Core Duo CPU) as
 well as 64-bit x86_64 hardware (such as Intel Core 2 Duo and Athlon-64 CPUs).
@@ -187,7 +187,7 @@ version included in this distribution does not require that it be installed,
 and is therefore usable "out of the box". To implement this change, the
 macos.gcc.inc file was modified with this line:
 
-LIB_LINK_FLAGS = -dynamiclib -Wl,-install_name,@executable_path/$@
+LIB_LINK_FLAGS = -dynamiclib -Wl,-exported_symbols_list,$(TBB.DEF) -Wl,-install_name,@executable_path/$@
 
 
 The par2 executable has been symbol stripped (using the 'strip' command line
@@ -349,6 +349,21 @@ enough memory to not be I/O bound when creating or repairing parity/data files.
 
 --- Version History ---
 
+
+The changes in the 20080420 version are:
+
+- added the -t0 option to allow verification to be done serially but still perform
+  repair concurrently, and for creation, MD5 checksumming will be done serially
+  and par2 data creation will be done concurrently. The default is to perform
+  all operations concurrently, so if you want the new behaviour, you will need to
+  manually specify -t0 on the command line or build your own custom version of
+  the executable.
+- if the realpath() API returned NULL, the par2 files created would end up with
+  the name of the first file in the list of files to create par2 files for. Fixed.
+- no longer includes duplicate file names in the list of files to create redundancy
+  data for (which would otherwise bloat the .par2 files)
+- now displays the instruction set being executed
+- updated to use the tbb20_017oss_src.tar.gz version of the Intel TBB library.
 
 The changes in the 20080203 version are:
 
@@ -597,7 +612,7 @@ The changes in the 20070831 version are:
 
 
 Vincent Tan.
-February 3, 2008.
+April 20, 2008.
 
 //
 //  Modifications for concurrent processing, Unicode support, and hierarchial

@@ -62,7 +62,7 @@ Par2Repairer::Par2Repairer(void)
   noiselevel = CommandLine::nlNormal;
 
 #if WANT_CONCURRENT
-  use_concurrent_processing = true;
+  concurrent_processing_level = ALL_CONCURRENT;
   cout_in_use = 0;
   last_cout = tbb::tick_count::now();
 #endif
@@ -106,9 +106,19 @@ Result Par2Repairer::Process(const CommandLine &commandline, bool dorepair)
   noiselevel = commandline.GetNoiseLevel();
 
 #if WANT_CONCURRENT
-  use_concurrent_processing = commandline.UseConcurrentProcessing();
-  if (noiselevel > CommandLine::nlQuiet)
-    cout << "Processing with " << (use_concurrent_processing ? "multiple cores" : "a single core") << "." << endl;
+  concurrent_processing_level = commandline.GetConcurrentProcessingLevel();
+  if (noiselevel > CommandLine::nlQuiet) {
+    cout << "Processing ";
+    if (ALL_SERIAL == concurrent_processing_level)
+      cout << "verifications and repairs serially.";
+    else if (CHECKSUM_SERIALLY_BUT_PROCESS_CONCURRENTLY == concurrent_processing_level)
+      cout << "verifications serially and repairs concurrently.";
+    else if (ALL_CONCURRENT == concurrent_processing_level)
+      cout << "verifications and repairs concurrently.";
+    else
+      return eLogicError;
+    cout << endl;
+  }
 #endif
 
   // Get filesnames from the command line
@@ -699,7 +709,7 @@ bool Par2Repairer::LoadVerificationPacket(DiskFile *diskfile, u64 offset, PACKET
 bool Par2Repairer::LoadMainPacket(DiskFile *diskfile, u64 offset, PACKET_HEADER &header)
 {
   // Do we already have a main packet
-  if (0 != mainpacket)
+  if (!!mainpacket)
     return false;
 
   MainPacket *packet = new MainPacket;
@@ -727,7 +737,7 @@ bool Par2Repairer::LoadMainPacket(DiskFile *diskfile, u64 offset, PACKET_HEADER 
 bool Par2Repairer::LoadCreatorPacket(DiskFile *diskfile, u64 offset, PACKET_HEADER &header)
 {
   // Do we already have a creator packet
-  if (0 != creatorpacket)
+  if (!!creatorpacket)
     return false;
 
   CreatorPacket *packet = new CreatorPacket;
@@ -897,7 +907,7 @@ bool Par2Repairer::LoadPacketsFromOtherFiles(string filename)
     std::copy(files->begin(), files->end(), std::inserter(allfiles, allfiles.begin()));
   }
 
-  if (use_concurrent_processing) {
+  if (ALL_CONCURRENT == concurrent_processing_level) {
     std::vector<string> v;
     v.reserve(allfiles.size());
     std::copy(allfiles.begin(), allfiles.end(), std::back_inserter(v));
@@ -966,7 +976,7 @@ bool Par2Repairer::CheckPacketConsistency(void)
 //CTimeInterval  ti_setup("CheckPacketConsistency");
 
   // Do we have a main packet
-  if (0 == mainpacket)
+  if (!mainpacket)
   {
     // If we don't have a main packet, then there is nothing more that we can do.
     // We cannot verify or repair any files.
@@ -1415,7 +1425,7 @@ bool Par2Repairer::VerifySourceFiles(void)
 
   sort(sortedfiles.begin(), sortedfiles.end(), SortSourceFilesByFileName);
 #if WANT_CONCURRENT_SOURCE_VERIFICATION
-  if (use_concurrent_processing)
+  if (ALL_CONCURRENT == concurrent_processing_level)
   #if WANT_PARALLEL_WHILE
   {
     if (!sortedfiles.empty()) {
@@ -2580,7 +2590,7 @@ bool Par2Repairer::ProcessData(u64 blockoffset, size_t blocklength)
 
 //CTimeInterval  ti_pdl("ProcessDataLoop");
 #if WANT_CONCURRENT
-      if (use_concurrent_processing)
+      if (ALL_SERIAL != concurrent_processing_level)
         tbb::parallel_for(tbb::blocked_range<u32>(0, missingblockcount, 16),
           ::ApplyPar2RepairerRSProcess(this, blocklength, inputindex));
       else

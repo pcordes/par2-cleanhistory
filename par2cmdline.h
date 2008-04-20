@@ -301,7 +301,7 @@ using namespace std;
 
 #define WANT_CONCURRENT                     1
 #define WANT_CONCURRENT_PAR2_FILE_OPENING   1
-#define WANT_CONCURRENT_SOURCE_VERIFICATION 0
+#define WANT_CONCURRENT_SOURCE_VERIFICATION 1
 
 #if WANT_CONCURRENT
   #include "tbb/task_scheduler_init.h"
@@ -443,7 +443,7 @@ using namespace std;
                   incrementing_parallel_while_with_max> >& w,
     ITEM* item)
   {
-    const size_t n = item->is_first() ? tbb::internal::DetectNumberOfWorkers() : 1;
+    const size_t n = item->is_first() ? tbb::DetectNumberOfWorkers() : 1;
 
     bool res = false;
     std::pair<bool, size_t> pr(w.increment_next_i());
@@ -481,6 +481,8 @@ using namespace std;
   }
 
   // === end generic classes for use with parallel_while() ===
+
+  enum { ALL_SERIAL, CHECKSUM_SERIALLY_BUT_PROCESS_CONCURRENTLY, ALL_CONCURRENT };
 #endif
 
 #include "letype.h"

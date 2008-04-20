@@ -160,7 +160,7 @@ protected:
                              // the recovery data is computed.
 
 #if WANT_CONCURRENT
-  bool                      use_concurrent_processing;
+  unsigned                  concurrent_processing_level;
   tbb::mutex                cout_mutex;
   tbb::atomic<u32>          cout_in_use; // this is used to display % done w/o blocking a thread
   tbb::tick_count           last_cout;   // when cout was used for output

@@ -121,7 +121,7 @@ public:
   const string&          GetBaseDirectory(void) const      {return base_directory;}
 
 #if WANT_CONCURRENT
-  bool                   UseConcurrentProcessing(void) const { return useconcurrentprocessing; }
+  unsigned               GetConcurrentProcessingLevel(void) const { return concurrent_processing_level; }
 #endif
 
   string                              GetParFilename(void) const {return parfilename;}
@@ -182,7 +182,7 @@ protected:
   // although it is possible to specify how many threads that TBB should
   // use, that functionality is not implemented (and the TBB documentation
   // recommends not using it in production code), so this is merely a bool:
-  bool useconcurrentprocessing; // whether to process serially or concurrently
+  unsigned concurrent_processing_level; // whether to process serially or concurrently
 #endif
 };
 

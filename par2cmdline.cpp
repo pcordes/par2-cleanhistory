@@ -41,7 +41,23 @@ void banner(void)
 #if WANT_CONCURRENT
        << "Modifications for concurrent processing, Unicode support, and hierarchial" << endl
        << "directory support are Copyright (c) 2007-2008 Vincent Tan." << endl
-       << "Concurrent processing utilises Intel Thread Building Blocks 2.0, Copyright (c) 2007 Intel Corp." << endl
+       << "Concurrent processing utilises Intel Thread Building Blocks 2.0," << endl
+       << "Copyright (c) 2007-2008 Intel Corp." << endl
+  #if __x86_64__ || defined(WIN64)
+       << "Executing using the 64-bit x86 (AMD64) instruction set." << endl
+  #elif __i386__ || defined(WIN32)
+       << "Executing using the 32-bit x86 (IA32) instruction set." << endl
+  #elif __ppc64__
+       << "Executing using the 64-bit PowerPC (PPC64) instruction set." << endl
+//#elif __ppc__
+//     << "Executing using the 32-bit PowerPC (PPC32) instruction set." << endl
+//#elif __alpha__
+//     << "Executing using the 32-bit Alpha (ALPHA) instruction set." << endl
+//#elif __mips__
+//     << "Executing using the 32-bit MIPS (MIPS) instruction set." << endl
+  #else
+       << "Executing using an unknown instruction set." << endl
+  #endif
 #endif
        << endl
        << "par2cmdline comes with ABSOLUTELY NO WARRANTY." << endl

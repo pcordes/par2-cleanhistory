@@ -55,7 +55,7 @@ Par2Creator::Par2Creator(void)
 , deferhashcomputation(false)
 
 #if WANT_CONCURRENT
-, use_concurrent_processing(true)
+, concurrent_processing_level(ALL_CONCURRENT)
 , last_cout(tbb::tick_count::now())
 #endif
 {
@@ -86,7 +86,7 @@ Result Par2Creator::Process(const CommandLine &commandline)
   noiselevel = commandline.GetNoiseLevel();
   blocksize = commandline.GetBlockSize();
   sourceblockcount = commandline.GetBlockCount();
-  const list<CommandLine::ExtraFile> extrafiles = commandline.GetExtraFiles();
+  const list<CommandLine::ExtraFile> &extrafiles = commandline.GetExtraFiles();
   sourcefilecount = (u32)extrafiles.size();
   u32 redundancy = commandline.GetRedundancy();
   recoveryblockcount = commandline.GetRecoveryBlockCount();
@@ -98,9 +98,19 @@ Result Par2Creator::Process(const CommandLine &commandline)
   largestfilesize = commandline.GetLargestSourceSize();
 
 #if WANT_CONCURRENT
-  use_concurrent_processing = commandline.UseConcurrentProcessing();
-  if (noiselevel > CommandLine::nlQuiet)
-    cout << "Processing with " << (use_concurrent_processing ? "multiple cores" : "a single core") << "." << endl;
+  concurrent_processing_level = commandline.GetConcurrentProcessingLevel();
+  if (noiselevel > CommandLine::nlQuiet) {
+    cout << "Processing ";
+    if (ALL_SERIAL == concurrent_processing_level)
+      cout << "checksums and Reed-Solomon data serially.";
+    else if (CHECKSUM_SERIALLY_BUT_PROCESS_CONCURRENTLY == concurrent_processing_level)
+      cout << "checksums serially and Reed-Solomon data concurrently.";
+    else if (ALL_CONCURRENT == concurrent_processing_level)
+      cout << "checksums and Reed-Solomon data concurrently.";
+    else
+      return eLogicError;
+    cout << endl;
+  }
 #endif
 
   // Compute block size from block count or vice versa depending on which was
@@ -612,7 +622,7 @@ class ApplyOpenSourceFile {
 bool Par2Creator::OpenSourceFiles(const list<CommandLine::ExtraFile> &extrafiles)
 {
 #if WANT_CONCURRENT_PAR2_FILE_OPENING
-  if (use_concurrent_processing) {
+  if (ALL_CONCURRENT == concurrent_processing_level) {
     std::vector<CommandLine::ExtraFile> v;
     std::copy(extrafiles.begin(), extrafiles.end(), std::back_inserter(v));
 
@@ -1123,7 +1133,7 @@ bool Par2Creator::ProcessData(u64 blockoffset, size_t blocklength)
 
 //CTimeInterval  ti_pdli("ProcessDataLoopInner");
 #if WANT_CONCURRENT
-    if (use_concurrent_processing)
+    if (ALL_SERIAL != concurrent_processing_level)
       tbb::parallel_for(tbb::blocked_range<u32>(0, recoveryblockcount, 1),
         ::ApplyPar2CreatorRSProcess(this, blocklength, inputblock));
     else
