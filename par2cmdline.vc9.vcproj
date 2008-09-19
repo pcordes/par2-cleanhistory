@@ -18,8 +18,8 @@
 	<Configurations>
 		<Configuration
 			Name="Debug|Win32"
-			OutputDirectory="Debug"
-			IntermediateDirectory="Debug"
+			OutputDirectory="$(SolutionDir)$(ConfigurationName)"
+			IntermediateDirectory="$(ConfigurationName)"
 			ConfigurationType="1"
 			InheritedPropertySheets="$(VCInstallDir)VCProjectDefaults\UpgradeFromVC71.vsprops"
 			CharacterSet="1"
@@ -42,7 +42,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories="..\tbb20_017oss_src\include;..\tbb20_017oss_src\src"
+				AdditionalIncludeDirectories="..\tbb21_009oss\include"
 				PreprocessorDefinitions="WIN32;_DEBUG;_CONSOLE;PACKAGE=\&quot;par2cmdline\&quot;;VERSION=\&quot;0.4\&quot;"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
@@ -63,7 +63,7 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="..\tbb20_017oss_src\ia32\vc7.1\lib\tbb.lib $(InputDir)\CxxFrameHandler3_to_CxxFrameHandler.obj $(NOINHERIT)"
+				AdditionalDependencies="..\tbb21_009oss\ia32\vc7.1\lib\tbb_debug.lib $(InputDir)\CxxFrameHandler3_to_CxxFrameHandler.obj $(NOINHERIT)"
 				OutputFile="$(OutDir)/par2.exe"
 				LinkIncremental="2"
 				GenerateDebugInformation="true"
@@ -122,7 +122,7 @@
 				Name="VCCLCompilerTool"
 				AdditionalOptions="/MP"
 				Optimization="3"
-				AdditionalIncludeDirectories="..\tbb20_017oss_src\include;..\tbb20_017oss_src\src"
+				AdditionalIncludeDirectories="..\tbb21_009oss\include"
 				PreprocessorDefinitions="WIN32;NDEBUG;_CONSOLE;PACKAGE=\&quot;par2cmdline\&quot;;VERSION=\&quot;0.4\&quot;"
 				StringPooling="true"
 				RuntimeLibrary="2"
@@ -144,7 +144,7 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="..\tbb20_017oss_src\ia32\vc7.1\lib\tbb.lib $(InputDir)\CxxFrameHandler3_to_CxxFrameHandler.obj $(NOINHERIT)"
+				AdditionalDependencies="..\tbb21_009oss\ia32\vc7.1\lib\tbb.lib $(InputDir)\CxxFrameHandler3_to_CxxFrameHandler.obj $(NOINHERIT)"
 				OutputFile="$(OutDir)/par2.exe"
 				GenerateDebugInformation="true"
 				SubSystem="1"

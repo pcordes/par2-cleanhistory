@@ -17,8 +17,8 @@
 //  along with this program; if not, write to the Free Software
 //  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 //
-//  Modifications for concurrent processing, Unicode support, and hierarchial
-//  directory support are Copyright (c) 2007-2008 Vincent Tan.
+//  Modifications for concurrent processing, async I/O, Unicode support, and
+//  hierarchial directory support are Copyright (c) 2007-2008 Vincent Tan.
 //  Search for "#if WANT_CONCURRENT" for concurrent code.
 //  Concurrent processing utilises Intel Thread Building Blocks 2.0,
 //  Copyright (c) 2007 Intel Corp.
@@ -65,6 +65,74 @@ typedef unsigned int     size_t;
 #  define _SIZE_T_DEFINED
 #endif
 
+#ifndef ULONG_MAX
+  enum { ULONG_MAX = 0xffffffffUL /* maximum unsigned long value */ };
+#endif
+
+  #define HAVE_ASYNC_IO 1
+
+  struct aiocb_type : OVERLAPPED {
+  public:
+    typedef unsigned __int64 off_t;
+  private:
+    HANDLE hFile_;
+
+    bool rw(HANDLE hFile, size_t sz, const void* buf, off_t off, bool want_write) {
+      if (sz > ULONG_MAX)
+        return false; // Win64 boundary case
+
+      LARGE_INTEGER li;
+      li.QuadPart = off;
+      this->Offset = li.LowPart;        /* File offset */
+      this->OffsetHigh = li.HighPart;        /* File offset */
+      BOOL b = want_write ? ::WriteFile(hFile, buf, sz, NULL, this) :
+                            ::ReadFile(hFile, const_cast<void*> (buf), sz, NULL, this);
+      if (!b)
+        b = ERROR_IO_PENDING == ::GetLastError(); // request has already completed or is pending
+      if (b)
+        hFile_ = hFile;
+      return FALSE != b;
+    }
+
+  public:
+    aiocb_type(void) : hFile_(INVALID_HANDLE_VALUE) {
+      memset(this, 0, sizeof(OVERLAPPED));
+      hEvent = ::CreateEvent(NULL, TRUE, FALSE, NULL);
+    }
+
+    aiocb_type(const aiocb_type&) : hFile_(INVALID_HANDLE_VALUE) {
+      memset(this, 0, sizeof(OVERLAPPED));
+      hEvent = ::CreateEvent(NULL, TRUE, FALSE, NULL);
+    }
+
+    aiocb_type& operator=(const aiocb_type&) { return *this; }
+
+    ~aiocb_type(void) {
+      if (NULL != hEvent) ::CloseHandle(hEvent);
+    }
+
+    bool read(HANDLE hFile, size_t sz, void* buf, off_t off) {
+      return rw(hFile, sz, buf, off, false);
+    }
+
+    bool write(HANDLE hFile, size_t sz, const void* buf, off_t off) {
+      return rw(hFile, sz, buf, off, true);
+    }
+
+    void suspend_until_completed(void) const {
+      ::WaitForSingleObject(hEvent, INFINITE);
+    }
+
+    bool has_completed(void) const {
+      return WAIT_OBJECT_0 == ::WaitForSingleObject(hEvent, 0);
+    }
+
+    bool completedOK(void) const {
+      assert(has_completed());
+      DWORD nbTransferred;
+      return FALSE != ::GetOverlappedResult(hFile_, const_cast<aiocb_type*> (this), &nbTransferred, FALSE);
+    }
+  };
 
 #else // WIN32
 #ifdef HAVE_CONFIG_H
@@ -172,6 +240,75 @@ typedef unsigned long long u64;
 #  else
 #    define __BYTE_ORDER __LITTLE_ENDIAN
 #  endif
+#endif
+
+#if HAVE_AIO_H && HAVE_ERRNO_H
+#  include <errno.h>
+#  include <aio.h>
+#  include <assert.h>
+
+  #define HAVE_ASYNC_IO 1
+
+  #ifndef NDEBUG
+    extern bool want_printf(int res);
+  #endif
+
+  struct aiocb_type : aiocb {
+  private:
+    bool rw(int fildes, size_t sz, const void* buf, off_t off, bool want_write) {
+      memset(this, 0, sizeof(aiocb));
+      this->aio_fildes = fildes;        /* File descriptor */
+      this->aio_offset = off;        /* File offset */
+      this->aio_buf = static_cast<volatile void*> (const_cast<void*> (buf));        /* Location of buffer */
+      this->aio_nbytes = sz;        /* Length of transfer */
+  #ifndef NDEBUG
+      int res = want_write ? ::aio_write(this) : ::aio_read(this);
+      if (-1 == res)
+        res = errno;
+      if (want_printf(res)) printf("aio_rw(%p) -> %d (%s)\n", this, res, strerror(res));
+      return 0 == res;
+  #else
+      return 0 == (want_write ? ::aio_write(this) : ::aio_read(this));
+  #endif
+    }
+
+  public:
+    aiocb_type(void) {
+    //memset(this, 0, sizeof(aiocb));
+    }
+
+    bool read(int fildes, size_t sz, const void* buf, off_t off) {
+      return rw(fildes, sz, buf, off, false);
+    }
+
+    bool write(int fildes, size_t sz, const void* buf, off_t off) {
+      return rw(fildes, sz, buf, off, true);
+    }
+
+    void suspend_until_completed(void) const {
+      const struct aiocb* l[1] = {this};
+#ifndef NDEBUG
+      int res = ::aio_suspend(l, 1, NULL);
+      assert(EINTR == res || 0 == res);
+//    if (!(EINTR == res || 0 == res)) printf("aio_suspend(%p) -> %d (%s)\n", this, res, strerror(res));
+#else
+      ::aio_suspend(l, 1, NULL);
+#endif
+    }
+
+    bool has_completed(void) const {
+      int res = ::aio_error(this);
+      assert(EINVAL != res);
+      return EINPROGRESS != res;
+    }
+
+    bool completedOK(void) const {
+      int res = ::aio_error(this);
+      assert(EINVAL != res && EINPROGRESS != res);
+      return EINPROGRESS != res ? -1 != ::aio_return(const_cast<aiocb_type*> (this)) : res;
+    }
+  };
+
 #endif
 
 #else // HAVE_CONFIG_H
@@ -312,6 +449,7 @@ using namespace std;
   #include "tbb/blocked_range.h"
   #include "tbb/parallel_for.h"
   #include "tbb/mutex.h"
+  #include "tbb/pipeline.h"
 
   class CTimeInterval {
   public:
@@ -332,155 +470,18 @@ using namespace std;
     bool            _done;
   };
 
-  #define WANT_PARALLEL_WHILE 1
-
-  // using parallel_for() causes disk thrashing because it partitions
-  // the files into large groups, each of which is iterated over by one
-  // thread. For example, 100 files on a 2 CPU machine would be processed
-  // in a manner like this:
-  //
-  // thread #1: file 1, file 2, file 3, ..., file 50
-  // thread #2: file 51, file 52, file 53, ..., file 100
-  //
-  // using parallel_while allows the threads to iterate over the files
-  // in sequential order; in effect, a FIFO queue is being implemented.
-
-  #include "tbb/parallel_while.h"
-  #include "tbb/tbb_misc.h" // for tbb::DetectNumberOfWorkers(); it's a pity that tbb_misc.h is not in <tbb_home>/include/tbb/
-
-  // === begin generic classes for use with parallel_while() ===
-
-  template <typename ITEM>
-  class item_stream {
-    ITEM _item;
-  public:
-    bool pop_if_present( ITEM& item ) {
-      if ( _item ) {
-        item = _item;
-        _item = get_next_item(_item);
-        return true;
-      } else {
-        return false;
-      }
-    }
-
-    item_stream(ITEM root_item) : _item(root_item) {}
+  template <typename T>
+  struct intptr_hasher {
+    static  size_t  hash(T i) { return static_cast<size_t> (31 + (size_t) i * 17); }
+    static  bool  equal( T x, T y ) { return x == y; }
   };
 
-  template <typename BODY>
-  class incrementing_parallel_while : public tbb::parallel_while<BODY> {
-    tbb::atomic<size_t> _nexti;
-  public:
-    incrementing_parallel_while(size_t start_i = 0) { _nexti = start_i; }
-    size_t get_next_i(void) const { return _nexti; }
+  typedef intptr_hasher<u32>    u32_hasher;
+//typedef intptr_hasher<size_t> size_t_hasher;
 
-    std::pair<bool, size_t> increment_next_i_up_to(size_t max_i) {
-      size_t i = 1 + _nexti.fetch_and_increment();
-      if (i < max_i)
-        return std::pair<bool, size_t>(true, i);
-
-      _nexti.fetch_and_decrement();
-      return std::pair<bool, size_t>(false, 0);
-    }
-  };
-
-  template <typename BODY>
-  class incrementing_parallel_while_with_max : public incrementing_parallel_while<BODY> {
-    size_t _maxi;
-  public:
-    incrementing_parallel_while_with_max(size_t start_i, size_t max_i) :
-      incrementing_parallel_while<BODY>(start_i), _maxi(max_i) { assert(start_i != max_i); }
-
-    std::pair<bool, size_t> increment_next_i(void)
-    { return incrementing_parallel_while<BODY>::increment_next_i_up_to(_maxi); }
-  };
-
-  template <typename ITEM, template <typename ITEM> class PARALLEL_WHILE = incrementing_parallel_while>
-  class item_applier {
-    PARALLEL_WHILE< item_applier<ITEM, PARALLEL_WHILE> >& _w;
-  public:
-    void operator()( ITEM item ) const {
-      apply_to_item(item);
-      if (!add_next_items(_w, item))
-        dispose_item(item);
-    }
-
-    typedef ITEM argument_type;
-    item_applier(PARALLEL_WHILE< item_applier<ITEM, PARALLEL_WHILE> >& w) : _w(w) {}
-  };
-
-  template <typename ITEM>
-  static
-  ITEM*
-  get_next_item(ITEM* item)
-  {
-    return item->next();
-  }
-
-  template <typename ITEM>
-  static
-  void
-  apply_to_item(ITEM* item)
-  {
-    item->apply();
-  }
-
-  template <typename ITEM>
-  static
-  void
-  dispose_item(ITEM* item)
-  {
-    delete item;
-  }
-
-  // returns true if item was recycled into w (so caller should not dispose of item),
-  // and false if item was not recycled (so caller MUST dispose of item)
-  template <typename ITEM>
-  static
-  bool
-  add_next_items(
-    incrementing_parallel_while_with_max< item_applier<ITEM*,
-                  incrementing_parallel_while_with_max> >& w,
-    ITEM* item)
-  {
-    const size_t n = item->is_first() ? tbb::DetectNumberOfWorkers() : 1;
-
-    bool res = false;
-    std::pair<bool, size_t> pr(w.increment_next_i());
-    if (pr.first && item->set_next_i(pr.second)) {
-      w.add(item);
-      res = true;
-
-      for (size_t i = 1; i != n; ++i) {
-        pr = w.increment_next_i();
-        if (pr.first) {
-          ITEM* clone = item->clone_for_next_i(pr.second);
-          if (clone) {
-            w.add(clone);
-            continue;
-          }
-        }
-        break;
-      }
-    }
-
-    return res;
-  }
-
-  template <typename ITEM, template <typename ITEM> class PARALLEL_WHILE>
-  static
-  void
-  parallel_while(ITEM* first_item, size_t item_count)
-  {
-    std::auto_ptr<ITEM> item(first_item); // capture first_item for exception safety
-    PARALLEL_WHILE< item_applier<ITEM*, PARALLEL_WHILE> >
-                                        w(0, item_count);
-    item_applier<ITEM*, PARALLEL_WHILE> body(w);
-    item_stream<ITEM*>                  stream(item.release());
-    w.run( stream, body );
-  }
-
-  // === end generic classes for use with parallel_while() ===
+  #if HAVE_ASYNC_IO
+    #define CONCURRENT_PIPELINE 1
+  #endif
 
   enum { ALL_SERIAL, CHECKSUM_SERIALLY_BUT_PROCESS_CONCURRENTLY, ALL_CONCURRENT };
 #endif
@@ -514,6 +515,7 @@ using namespace std;
 
 #include "par2creator.h"
 #include "par2repairer.h"
+#include "par2pipeline.h"
 
 #include "par1fileformat.h"
 #include "par1repairersourcefile.h"

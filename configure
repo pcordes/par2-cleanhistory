@@ -715,6 +715,10 @@ X86MMX_TRUE
 X86MMX_FALSE
 X86CPU_TRUE
 X86CPU_FALSE
+PPC64_TRUE
+PPC64_FALSE
+PPC32_TRUE
+PPC32_FALSE
 PLATFORM_LINUX_TRUE
 PLATFORM_LINUX_FALSE
 PLATFORM_DARWIN_TRUE
@@ -4100,25 +4104,16 @@ fi
 
 
 
+
+cat >>confdefs.h <<\_ACEOF
+#define NDEBUG
+_ACEOF
+
+
 case "$host_cpu" in
 	x86_64)
-
-cat >>confdefs.h <<\_ACEOF
-#define MMX_COEF 8
-_ACEOF
-
-
-cat >>confdefs.h <<\_ACEOF
-#define MMX_TYPE "AMD64"
-_ACEOF
-
 		{ echo "$as_me:$LINENO: result: SSE2_on_x86_64 is enabled" >&5
 echo "${ECHO_T}SSE2_on_x86_64 is enabled" >&6; }
-
-cat >>confdefs.h <<\_ACEOF
-#define CFLAGS_ARCH -m64
-_ACEOF
-
 		 if true; then
   AMD64_TRUE=
   AMD64_FALSE='#'
@@ -4143,18 +4138,24 @@ else
   X86CPU_FALSE=
 fi
 
+		 if false; then
+  PPC64_TRUE=
+  PPC64_FALSE='#'
+else
+  PPC64_TRUE='#'
+  PPC64_FALSE=
+fi
+
+		 if false; then
+  PPC32_TRUE=
+  PPC32_FALSE='#'
+else
+  PPC32_TRUE='#'
+  PPC32_FALSE=
+fi
+
 		;;
 	i686)
-
-cat >>confdefs.h <<\_ACEOF
-#define MMX_COEF 4
-_ACEOF
-
-
-cat >>confdefs.h <<\_ACEOF
-#define MMX_TYPE "SSE2"
-_ACEOF
-
 		{ echo "$as_me:$LINENO: result: SSE2_on_i686 is enabled" >&5
 echo "${ECHO_T}SSE2_on_i686 is enabled" >&6; }
 		 if false; then
@@ -4181,18 +4182,24 @@ else
   X86CPU_FALSE=
 fi
 
+		 if false; then
+  PPC64_TRUE=
+  PPC64_FALSE='#'
+else
+  PPC64_TRUE='#'
+  PPC64_FALSE=
+fi
+
+		 if false; then
+  PPC32_TRUE=
+  PPC32_FALSE='#'
+else
+  PPC32_TRUE='#'
+  PPC32_FALSE=
+fi
+
 		;;
 	i586)
-
-cat >>confdefs.h <<\_ACEOF
-#define MMX_COEF 2
-_ACEOF
-
-
-cat >>confdefs.h <<\_ACEOF
-#define MMX_TYPE "MMX"
-_ACEOF
-
 		{ echo "$as_me:$LINENO: result: MMX is enabled" >&5
 echo "${ECHO_T}MMX is enabled" >&6; }
 		 if false; then
@@ -4217,6 +4224,22 @@ fi
 else
   X86CPU_TRUE='#'
   X86CPU_FALSE=
+fi
+
+		 if false; then
+  PPC64_TRUE=
+  PPC64_FALSE='#'
+else
+  PPC64_TRUE='#'
+  PPC64_FALSE=
+fi
+
+		 if false; then
+  PPC32_TRUE=
+  PPC32_FALSE='#'
+else
+  PPC32_TRUE='#'
+  PPC32_FALSE=
 fi
 
 		;;
@@ -4247,6 +4270,118 @@ else
   X86MMX_FALSE=
 fi
 
+		 if false; then
+  PPC64_TRUE=
+  PPC64_FALSE='#'
+else
+  PPC64_TRUE='#'
+  PPC64_FALSE=
+fi
+
+		 if false; then
+  PPC32_TRUE=
+  PPC32_FALSE='#'
+else
+  PPC32_TRUE='#'
+  PPC32_FALSE=
+fi
+
+		;;
+	powerpc64)
+		{ echo "$as_me:$LINENO: result: PPC64 is enabled" >&5
+echo "${ECHO_T}PPC64 is enabled" >&6; }
+		 if false; then
+  AMD64_TRUE=
+  AMD64_FALSE='#'
+else
+  AMD64_TRUE='#'
+  AMD64_FALSE=
+fi
+
+		 if false; then
+  X86CPU_TRUE=
+  X86CPU_FALSE='#'
+else
+  X86CPU_TRUE='#'
+  X86CPU_FALSE=
+fi
+
+		 if false; then
+  X86MMX_TRUE=
+  X86MMX_FALSE='#'
+else
+  X86MMX_TRUE='#'
+  X86MMX_FALSE=
+fi
+
+		 if true; then
+  PPC64_TRUE=
+  PPC64_FALSE='#'
+else
+  PPC64_TRUE='#'
+  PPC64_FALSE=
+fi
+
+		 if false; then
+  PPC32_TRUE=
+  PPC32_FALSE='#'
+else
+  PPC32_TRUE='#'
+  PPC32_FALSE=
+fi
+
+		cat >>confdefs.h <<\_ACEOF
+#define WORDS_BIGENDIAN 1
+_ACEOF
+
+		;;
+	powerpc)
+		{ echo "$as_me:$LINENO: result: PPC32 is enabled" >&5
+echo "${ECHO_T}PPC32 is enabled" >&6; }
+		 if false; then
+  AMD64_TRUE=
+  AMD64_FALSE='#'
+else
+  AMD64_TRUE='#'
+  AMD64_FALSE=
+fi
+
+		 if false; then
+  X86CPU_TRUE=
+  X86CPU_FALSE='#'
+else
+  X86CPU_TRUE='#'
+  X86CPU_FALSE=
+fi
+
+		 if false; then
+  X86MMX_TRUE=
+  X86MMX_FALSE='#'
+else
+  X86MMX_TRUE='#'
+  X86MMX_FALSE=
+fi
+
+		 if false; then
+  PPC64_TRUE=
+  PPC64_FALSE='#'
+else
+  PPC64_TRUE='#'
+  PPC64_FALSE=
+fi
+
+		 if true; then
+  PPC32_TRUE=
+  PPC32_FALSE='#'
+else
+  PPC32_TRUE='#'
+  PPC32_FALSE=
+fi
+
+		cat >>confdefs.h <<\_ACEOF
+#define WORDS_BIGENDIAN 1
+_ACEOF
+
 		;;
 	*)
 		 if false; then
@@ -4273,11 +4408,27 @@ else
   X86MMX_FALSE=
 fi
 
+		 if false; then
+  PPC64_TRUE=
+  PPC64_FALSE='#'
+else
+  PPC64_TRUE='#'
+  PPC64_FALSE=
+fi
+
+		 if false; then
+  PPC32_TRUE=
+  PPC32_FALSE='#'
+else
+  PPC32_TRUE='#'
+  PPC32_FALSE=
+fi
+
 		;;
 esac
 
 case "$host" in
-	*-pc-linux-gnu)
+	*-*-linux-gnu)
 		sys_linux=true
 		 if true; then
   PLATFORM_LINUX_TRUE=
@@ -5609,7 +5760,9 @@ fi
 
 
 
-for ac_header in stdio.h endian.h
+
+
+for ac_header in stdio.h endian.h aio.h errno.h
 do
 as_ac_Header=`echo "ac_cv_header_$ac_header" | $as_tr_sh`
 if { as_var=$as_ac_Header; eval "test \"\${$as_var+set}\" = set"; }; then
@@ -7465,24 +7618,17 @@ echo "$as_me: error: conditional \"X86CPU\" was never defined.
 Usually this means the macro was only invoked conditionally." >&2;}
    { (exit 1); exit 1; }; }
 fi
-if test -z "${AMD64_TRUE}" && test -z "${AMD64_FALSE}"; then
-  { { echo "$as_me:$LINENO: error: conditional \"AMD64\" was never defined.
+if test -z "${PPC64_TRUE}" && test -z "${PPC64_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"PPC64\" was never defined.
 Usually this means the macro was only invoked conditionally." >&5
-echo "$as_me: error: conditional \"AMD64\" was never defined.
+echo "$as_me: error: conditional \"PPC64\" was never defined.
 Usually this means the macro was only invoked conditionally." >&2;}
    { (exit 1); exit 1; }; }
 fi
-if test -z "${X86MMX_TRUE}" && test -z "${X86MMX_FALSE}"; then
-  { { echo "$as_me:$LINENO: error: conditional \"X86MMX\" was never defined.
+if test -z "${PPC32_TRUE}" && test -z "${PPC32_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"PPC32\" was never defined.
 Usually this means the macro was only invoked conditionally." >&5
-echo "$as_me: error: conditional \"X86MMX\" was never defined.
-Usually this means the macro was only invoked conditionally." >&2;}
-   { (exit 1); exit 1; }; }
-fi
-if test -z "${X86CPU_TRUE}" && test -z "${X86CPU_FALSE}"; then
-  { { echo "$as_me:$LINENO: error: conditional \"X86CPU\" was never defined.
-Usually this means the macro was only invoked conditionally." >&5
-echo "$as_me: error: conditional \"X86CPU\" was never defined.
+echo "$as_me: error: conditional \"PPC32\" was never defined.
 Usually this means the macro was only invoked conditionally." >&2;}
    { (exit 1); exit 1; }; }
 fi
@@ -7507,6 +7653,55 @@ echo "$as_me: error: conditional \"X86CPU\" was never defined.
 Usually this means the macro was only invoked conditionally." >&2;}
    { (exit 1); exit 1; }; }
 fi
+if test -z "${PPC64_TRUE}" && test -z "${PPC64_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"PPC64\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+echo "$as_me: error: conditional \"PPC64\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
+if test -z "${PPC32_TRUE}" && test -z "${PPC32_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"PPC32\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+echo "$as_me: error: conditional \"PPC32\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
+if test -z "${AMD64_TRUE}" && test -z "${AMD64_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"AMD64\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+echo "$as_me: error: conditional \"AMD64\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
+if test -z "${X86MMX_TRUE}" && test -z "${X86MMX_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"X86MMX\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+echo "$as_me: error: conditional \"X86MMX\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
+if test -z "${X86CPU_TRUE}" && test -z "${X86CPU_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"X86CPU\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+echo "$as_me: error: conditional \"X86CPU\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
+if test -z "${PPC64_TRUE}" && test -z "${PPC64_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"PPC64\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+echo "$as_me: error: conditional \"PPC64\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
+if test -z "${PPC32_TRUE}" && test -z "${PPC32_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"PPC32\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+echo "$as_me: error: conditional \"PPC32\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
 if test -z "${AMD64_TRUE}" && test -z "${AMD64_FALSE}"; then
   { { echo "$as_me:$LINENO: error: conditional \"AMD64\" was never defined.
 Usually this means the macro was only invoked conditionally." >&5
@@ -7528,6 +7723,20 @@ echo "$as_me: error: conditional \"X86MMX\" was never defined.
 Usually this means the macro was only invoked conditionally." >&2;}
    { (exit 1); exit 1; }; }
 fi
+if test -z "${PPC64_TRUE}" && test -z "${PPC64_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"PPC64\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+echo "$as_me: error: conditional \"PPC64\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
+if test -z "${PPC32_TRUE}" && test -z "${PPC32_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"PPC32\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+echo "$as_me: error: conditional \"PPC32\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
 if test -z "${AMD64_TRUE}" && test -z "${AMD64_FALSE}"; then
   { { echo "$as_me:$LINENO: error: conditional \"AMD64\" was never defined.
 Usually this means the macro was only invoked conditionally." >&5
@@ -7546,6 +7755,90 @@ if test -z "${X86MMX_TRUE}" && test -z "${X86MMX_FALSE}"; then
   { { echo "$as_me:$LINENO: error: conditional \"X86MMX\" was never defined.
 Usually this means the macro was only invoked conditionally." >&5
 echo "$as_me: error: conditional \"X86MMX\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
+if test -z "${PPC64_TRUE}" && test -z "${PPC64_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"PPC64\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+echo "$as_me: error: conditional \"PPC64\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
+if test -z "${PPC32_TRUE}" && test -z "${PPC32_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"PPC32\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+echo "$as_me: error: conditional \"PPC32\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
+if test -z "${AMD64_TRUE}" && test -z "${AMD64_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"AMD64\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+echo "$as_me: error: conditional \"AMD64\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
+if test -z "${X86CPU_TRUE}" && test -z "${X86CPU_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"X86CPU\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+echo "$as_me: error: conditional \"X86CPU\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
+if test -z "${X86MMX_TRUE}" && test -z "${X86MMX_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"X86MMX\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+echo "$as_me: error: conditional \"X86MMX\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
+if test -z "${PPC64_TRUE}" && test -z "${PPC64_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"PPC64\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+echo "$as_me: error: conditional \"PPC64\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
+if test -z "${PPC32_TRUE}" && test -z "${PPC32_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"PPC32\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+echo "$as_me: error: conditional \"PPC32\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
+if test -z "${AMD64_TRUE}" && test -z "${AMD64_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"AMD64\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+echo "$as_me: error: conditional \"AMD64\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
+if test -z "${X86CPU_TRUE}" && test -z "${X86CPU_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"X86CPU\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+echo "$as_me: error: conditional \"X86CPU\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
+if test -z "${X86MMX_TRUE}" && test -z "${X86MMX_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"X86MMX\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+echo "$as_me: error: conditional \"X86MMX\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
+if test -z "${PPC64_TRUE}" && test -z "${PPC64_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"PPC64\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+echo "$as_me: error: conditional \"PPC64\" was never defined.
+Usually this means the macro was only invoked conditionally." >&2;}
+   { (exit 1); exit 1; }; }
+fi
+if test -z "${PPC32_TRUE}" && test -z "${PPC32_FALSE}"; then
+  { { echo "$as_me:$LINENO: error: conditional \"PPC32\" was never defined.
+Usually this means the macro was only invoked conditionally." >&5
+echo "$as_me: error: conditional \"PPC32\" was never defined.
 Usually this means the macro was only invoked conditionally." >&2;}
    { (exit 1); exit 1; }; }
 fi
@@ -8286,6 +8579,10 @@ for ac_last_try in false false false false false :; do
 X86MMX_FALSE!$X86MMX_FALSE$ac_delim
 X86CPU_TRUE!$X86CPU_TRUE$ac_delim
 X86CPU_FALSE!$X86CPU_FALSE$ac_delim
+PPC64_TRUE!$PPC64_TRUE$ac_delim
+PPC64_FALSE!$PPC64_FALSE$ac_delim
+PPC32_TRUE!$PPC32_TRUE$ac_delim
+PPC32_FALSE!$PPC32_FALSE$ac_delim
 PLATFORM_LINUX_TRUE!$PLATFORM_LINUX_TRUE$ac_delim
 PLATFORM_LINUX_FALSE!$PLATFORM_LINUX_FALSE$ac_delim
 PLATFORM_DARWIN_TRUE!$PLATFORM_DARWIN_TRUE$ac_delim
@@ -8299,7 +8596,7 @@ LIBOBJS!$LIBOBJS$ac_delim
 LTLIBOBJS!$LTLIBOBJS$ac_delim
 _ACEOF
 
-  if test `sed -n "s/.*$ac_delim\$/X/p" conf$$subs.sed | grep -c X` = 14; then
+  if test `sed -n "s/.*$ac_delim\$/X/p" conf$$subs.sed | grep -c X` = 18; then
     break
   elif $ac_last_try; then
     { { echo "$as_me:$LINENO: error: could not make $CONFIG_STATUS" >&5

@@ -1,7 +1,7 @@
 #  This file is part of par2cmdline (a PAR 2.0 compatible file verification and
 #  repair tool). See http://parchive.sourceforge.net for details of PAR 2.0.
 #
-#  Copyright (c) 2007-2008 Vincent Tan.
+#  Copyright (c) 2008 Vincent Tan.
 #
 #  par2cmdline is free software; you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -25,13 +25,14 @@
 #
 
 #
-# reedsolomon-inner-i386-posix.s
+# reedsolomon-i686-mmx-darwin.s
 #
-# void ReedSolomonInnerLoop(const u32* src, const u32* end, u32* dst,
-#                           const u16* L, const u16* H);
-#
-	.globl ReedSolomonInnerLoop
-	.text
-ReedSolomonInnerLoop:
 
-.include "reedsolomon-inner-i386.s"
+#
+# void rs_process_i686_mmx(void* dst, const void* src, size_t size, unsigned* LH);
+#
+	.private_extern _rs_process_i686_mmx
+	.text
+_rs_process_i686_mmx:
+
+#include "reedsolomon-i686-mmx.s"

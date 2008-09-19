@@ -74,6 +74,10 @@ public:
   // How many blocks does this source file use
   u32 BlockCount(void) const {return blockcount;}
 
+#ifndef NDEBUG
+  const string& get_diskfilename() const { return diskfilename; }  // The filename of the source file on disk.
+#endif
+
 protected:
   DescriptionPacket  *descriptionpacket;  // The file description packet.
   VerificationPacket *verificationpacket; // The file verification packet.

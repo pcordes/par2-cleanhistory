@@ -49,8 +49,8 @@ void banner(void)
        << "Executing using the 32-bit x86 (IA32) instruction set." << endl
   #elif __ppc64__
        << "Executing using the 64-bit PowerPC (PPC64) instruction set." << endl
-//#elif __ppc__
-//     << "Executing using the 32-bit PowerPC (PPC32) instruction set." << endl
+  #elif __ppc__
+       << "Executing using the 32-bit PowerPC (PPC32) instruction set." << endl
 //#elif __alpha__
 //     << "Executing using the 32-bit Alpha (ALPHA) instruction set." << endl
 //#elif __mips__

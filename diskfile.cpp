@@ -17,8 +17,8 @@
 //  along with this program; if not, write to the Free Software
 //  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 //
-//  Modifications for concurrent processing, Unicode support, and hierarchial
-//  directory support are Copyright (c) 2007-2008 Vincent Tan.
+//  Modifications for concurrent processing, async I/O, Unicode support, and
+//  hierarchial directory support are Copyright (c) 2007-2008 Vincent Tan.
 //  Search for "#if WANT_CONCURRENT" for concurrent code.
 //  Concurrent processing utilises Intel Thread Building Blocks 2.0,
 //  Copyright (c) 2007 Intel Corp.
@@ -63,7 +63,7 @@ DiskFile::~DiskFile(void)
 
 // Create new file on disk and make sure that there is enough
 // space on disk for it.
-bool DiskFile::Create(string _filename, u64 _filesize)
+bool DiskFile::Create(string _filename, u64 _filesize, bool async)
 {
   assert(hFile == INVALID_HANDLE_VALUE);
 
@@ -71,7 +71,14 @@ bool DiskFile::Create(string _filename, u64 _filesize)
   filesize = _filesize;
 
   // Create the file
-  hFile = ::CreateFile(utf8_string_to_native_char_array(_filename), GENERIC_READ | GENERIC_WRITE, 0, NULL, CREATE_NEW, 0, NULL);
+  hFile = ::CreateFile(utf8_string_to_native_char_array(_filename),
+                       GENERIC_READ | GENERIC_WRITE, 0, NULL, CREATE_NEW,
+#if HAVE_ASYNC_IO
+                       async ? FILE_FLAG_OVERLAPPED : 0,
+#else
+					   0,
+#endif
+                       NULL);
   if (hFile == INVALID_HANDLE_VALUE)
   {
     DWORD error = ::GetLastError();
@@ -174,16 +181,36 @@ bool DiskFile::Write(u64 _offset, const void *buffer, size_t length)
   return true;
 }
 
+#if HAVE_ASYNC_IO
+
+bool DiskFile::ReadAsync(aiocb_type& cb, u64 offset, void *buffer, size_t length) {
+  assert(INVALID_HANDLE_VALUE != hFile);
+  return cb.read(hFile, length, buffer, (off_t) offset);
+}
+
+bool DiskFile::WriteAsync(aiocb_type& cb, u64 offset, const void *buffer, size_t length) {
+  assert(INVALID_HANDLE_VALUE != hFile);
+  return cb.write(hFile, length, buffer, (off_t) offset);
+}
+
+#endif
+
 // Open the file
 
-bool DiskFile::Open(string _filename, u64 _filesize)
+bool DiskFile::Open(string _filename, u64 _filesize, bool async)
 {
   assert(hFile == INVALID_HANDLE_VALUE);
 
   filename = _filename;
   filesize = _filesize;
 
-  hFile = ::CreateFile(utf8_string_to_native_char_array(_filename), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+  hFile = ::CreateFile(utf8_string_to_native_char_array(_filename), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING,
+#if HAVE_ASYNC_IO
+                       async ? FILE_FLAG_OVERLAPPED : 0,
+#else
+					   0,
+#endif
+                       NULL);
   if (hFile == INVALID_HANDLE_VALUE)
   {
     DWORD error = ::GetLastError();
@@ -398,7 +425,7 @@ DiskFile::~DiskFile(void)
 
 // Create new file on disk and make sure that there is enough
 // space on disk for it.
-bool DiskFile::Create(string _filename, u64 _filesize)
+bool DiskFile::Create(string _filename, u64 _filesize, bool /* async */)
 {
   assert(file == 0);
 
@@ -493,9 +520,23 @@ bool DiskFile::Write(u64 _offset, const void *buffer, size_t length)
   return true;
 }
 
+#if HAVE_ASYNC_IO
+
+bool DiskFile::ReadAsync(aiocb_type& cb, u64 offset, void *buffer, size_t length) {
+  assert(NULL != file);
+  return cb.read(fileno(file), length, buffer, (off_t) offset);
+}
+
+bool DiskFile::WriteAsync(aiocb_type& cb, u64 offset, const void *buffer, size_t length) {
+  assert(NULL != file);
+  return cb.write(fileno(file), length, buffer, (off_t) offset);
+}
+
+#endif
+
 // Open the file
 
-bool DiskFile::Open(string _filename, u64 _filesize)
+bool DiskFile::Open(string _filename, u64 _filesize, bool /* async */)
 {
   assert(file == 0);
 
@@ -734,16 +775,16 @@ list<string>* DiskFile::FindFiles(string path, string wildcard)
 
 
 
-bool DiskFile::Open(void)
+bool DiskFile::Open(bool async)
 {
   string _filename = filename;
 
-  return Open(_filename);
+  return Open(_filename, async);
 }
 
-bool DiskFile::Open(string _filename)
+bool DiskFile::Open(string _filename, bool async)
 {
-  return Open(_filename, GetFileSize(_filename));
+  return Open(_filename, GetFileSize(_filename), async);
 }
 
 

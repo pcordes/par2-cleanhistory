@@ -17,8 +17,8 @@
 //  along with this program; if not, write to the Free Software
 //  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 //
-//  Modifications for concurrent processing, Unicode support, and hierarchial
-//  directory support are Copyright (c) 2007-2008 Vincent Tan.
+//  Modifications for concurrent processing, async I/O, Unicode support, and
+//  hierarchial directory support are Copyright (c) 2007-2008 Vincent Tan.
 //  Search for "#if WANT_CONCURRENT" for concurrent code.
 //  Concurrent processing utilises Intel Thread Building Blocks 2.0,
 //  Copyright (c) 2007 Intel Corp.
@@ -26,15 +26,9 @@
 #ifndef __PAR2REPAIRER_H__
 #define __PAR2REPAIRER_H__
 
+#define DSTOUT                0
+
 #if WANT_CONCURRENT
-
-  #include  <ctype.h>
-
-  struct u32_hasher {
-    static  size_t  hash(u32 i) { return static_cast<size_t> (i); }
-    static  bool  equal( u32 x, u32 y ) { return x == y; }
-  };
-
   struct string_hasher {
     static  size_t  hash(const std::string& x) {
       size_t h = 0;
@@ -98,6 +92,7 @@
     map_type _diskfilemap;             // Map from filename to DiskFile
   };
 
+  //#include  <ctype.h>
 #endif
 
 class Par2Repairer
@@ -116,12 +111,14 @@ public:
   #if WANT_CONCURRENT_SOURCE_VERIFICATION
   void VerifyOneSourceFile(Par2RepairerSourceFile *sourcefile, bool& finalresult);
   #endif
-  void ProcessDataForOutputIndex(u32 outputstartindex, u32 outputendindex, size_t blocklength, u32 inputindex);
+  void ProcessDataForOutputIndex(u32 outputstartindex, u32 outputendindex, size_t blocklength, u32 inputindex, void* inputbuffer);
+  void ProcessDataConcurrently(size_t blocklength, u32 inputindex, void* inputbuffer);
 #endif
   // Load packets from the specified file
   bool LoadPacketsFromFile(string filename);
 #if WANT_CONCURRENT
 protected:
+  bool ProcessDataForOutputIndex_(u32 outputindex, u32 outputendindex, size_t blocklength, u32 inputindex, void* inputbuffer);
 #endif
   // Finish loading a recovery packet
   bool LoadRecoveryPacket(DiskFile *diskfile, u64 offset, PACKET_HEADER &header);
@@ -263,14 +260,35 @@ protected:
 
   ReedSolomon<Galois16>     rs;                      // The Reed Solomon matrix.
 
-  void                     *inputbuffer;             // Buffer for reading DataBlocks (chunksize)
   void                     *outputbuffer;            // Buffer for writing DataBlocks (chunksize * missingblockcount)
 
 #if WANT_CONCURRENT
+  #if CONCURRENT_PIPELINE
+  // bit 0: which half of each entry in outputbuffer contains valid data (if DSTOUT is 1)
+  // bit 7: whether entry in outputbuffer is in use (0 = available, 1 = in-use)
+  std::vector< tbb::atomic<int> > outputbuffer_element_state_; // state of each entry of outputbuffer
+  size_t                   aligned_chunksize_;
+  #else
+  void                     *inputbuffer;             // Buffer for reading DataBlocks (chunksize)
+  #endif
+
+  // 32-bit PowerPC does not support tbb::atomic<u64> because it requires the ldarx
+  // instruction which is only available for 64-bit PowerPC CPUs, so...
+  #if __GNUC__ &&  __ppc__
+  // this won't cause any data corruption - it will only cause (possibly) incorrect progress values to be printed
+  u64                       progress;                // How much data has been processed.
+  #else
   tbb::atomic<u64>          progress;                // How much data has been processed.
+  #endif
 #else
+  void                     *inputbuffer;             // Buffer for reading DataBlocks (chunksize)
+  #if DSTOUT
+  std::vector<int>          outputbuffer_element_state_; // state of each entry of outputbuffer
+  #endif
+
   u64                       progress;                // How much data has been processed.
 #endif
+
   u64                       totaldata;               // Total amount of data to be processed.
 
 #if WANT_CONCURRENT

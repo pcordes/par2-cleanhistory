@@ -25,6 +25,11 @@
 
 #include "par2cmdline.h"
 
+#if __APPLE__
+  #include <sys/types.h>
+  #include <sys/sysctl.h>
+#endif
+
 #include <set>
 
 #ifdef _MSC_VER
@@ -35,7 +40,7 @@ static char THIS_FILE[]=__FILE__;
 #endif
 #endif
 
-#if defined(WIN32) || defined(__APPLE_CC__)
+#if defined(WIN32) || defined(__APPLE__)
   struct less_stri {
     bool operator()(const string& lhs, const string& rhs) const {
       return stricmp(lhs.c_str(), rhs.c_str()) < 0;
@@ -239,6 +244,8 @@ static char THIS_FILE[]=__FILE__;
 
     free(buf);
   } */
+
+  #define _tcstod strtod
 #endif
 
 
@@ -395,7 +402,7 @@ CommandLine::CommandLine(void)
 , recoveryfilecount(0)
 , recoveryblockcount(0)
 , recoveryblockcountset(false)
-, redundancy(0)
+, redundancy(0.0f)
 , redundancyset(false)
 , parfilename()
 , extrafiles()
@@ -405,6 +412,7 @@ CommandLine::CommandLine(void)
 #if WANT_CONCURRENT
 , concurrent_processing_level(ALL_CONCURRENT) // whether to process everything serially or concurrently
 #endif
+, create_dummy_par_files(false)
 {
   sInstance = this;
 }
@@ -448,6 +456,8 @@ void CommandLine::usage(void)
 #endif
     // 2007/10/21
     "  -d<dir>: root directory for paths to be put in par2 files OR root directory for files to repair from par2 files\n"
+    // 2008/07/07
+    "  -0: create dummy par2 files - for getting actual final par2 files sizes without doing any computing\n"
     "  --     : Treat all remaining CommandLine as filenames\n"
     "\n"
     "If you wish to create par2 files for a single source file, you may leave\n"
@@ -521,7 +531,7 @@ bool CommandLine::Parse(int argc, TCHAR *argv[])
   }
 
   bool options = true;
-#if defined(WIN32) || defined(__APPLE_CC__)
+#if defined(WIN32) || defined(__APPLE__)
   std::set<string, less_stri>  accepted_filenames;
 #else
   std::set<string>  accepted_filenames;
@@ -626,17 +636,21 @@ bool CommandLine::Parse(int argc, TCHAR *argv[])
             }
 
             TCHAR *p = &argv[0][2];
+#if 1
+            redundancy = (float) _tcstod(p, &p);
+#else
             while (redundancy <= 10 && *p && isdigit(*p))
             {
               redundancy = redundancy * 10 + (*p - '0');
               p++;
             }
-            if (redundancy > 100 || *p)
+#endif
+            if (redundancy > 100.0f || *p)
             {
               cerr << "Invalid redundancy option: " << argv[0] << endl;
               return false;
             }
-            if (redundancy == 0 && recoveryfilecount > 0)
+            if (redundancy == 0.0f && recoveryfilecount > 0)
             {
               cerr << "Cannot set redundancy to 0 and file count > 0" << endl;
               return false;
@@ -905,6 +919,10 @@ bool CommandLine::Parse(int argc, TCHAR *argv[])
           }
           break;
 #endif
+
+        case '0':
+          create_dummy_par_files = true;
+          break;
 
         case '-':
           {

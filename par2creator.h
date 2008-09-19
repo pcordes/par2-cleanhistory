@@ -17,8 +17,8 @@
 //  along with this program; if not, write to the Free Software
 //  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 //
-//  Modifications for concurrent processing, Unicode support, and hierarchial
-//  directory support are Copyright (c) 2007-2008 Vincent Tan.
+//  Modifications for concurrent processing, async I/O, Unicode support, and
+//  hierarchial directory support are Copyright (c) 2007-2008 Vincent Tan.
 //  Search for "#if WANT_CONCURRENT" for concurrent code.
 //  Concurrent processing utilises Intel Thread Building Blocks 2.0,
 //  Copyright (c) 2007 Intel Corp.
@@ -44,11 +44,13 @@ protected:
 
 #if WANT_CONCURRENT
 public:
-  void ProcessDataForOutputIndex(u32 outputstartindex, u32 outputendindex, size_t blocklength, u32 inputblock);
+  void ProcessDataForOutputIndex(u32 outputstartindex, u32 outputendindex, size_t blocklength, u32 inputblock, void* inputbuffer);
+  void ProcessDataConcurrently(size_t blocklength, u32 inputblock, void* inputbuffer);
   #if WANT_CONCURRENT_PAR2_FILE_OPENING
   Par2CreatorSourceFile* OpenSourceFile(const CommandLine::ExtraFile &extrafile);
   #endif
 protected:
+  bool ProcessDataForOutputIndex_(u32 outputblock, u32 outputendblock, size_t blocklength, u32 inputblock, void* inputbuffer);
 #endif
 
   // Compute block size from block count or vice versa depending on which was
@@ -57,7 +59,7 @@ protected:
 
   // Determine how many recovery blocks to create based on the source block
   // count and the requested level of redundancy.
-  bool ComputeRecoveryBlockCount(u32 redundancy);
+  bool ComputeRecoveryBlockCount(float redundancy);
 
   // Determine how much recovery data can be computed on one pass
   bool CalculateProcessBlockSize(size_t memorylimit);
@@ -112,7 +114,7 @@ protected:
   size_t chunksize;   // How much of each block will be processed at a 
                       // time (due to memory constraints).
 
-  void *inputbuffer;  // chunksize
+//void *inputbuffer;  // chunksize
   void *outputbuffer; // chunksize * recoveryblockcount
   
   u32 sourcefilecount;   // Number of source files for which recovery data will be computed.
@@ -148,9 +150,30 @@ protected:
   ReedSolomon<Galois16> rs;   // The Reed Solomon matrix.
 
 #if WANT_CONCURRENT
+  #if CONCURRENT_PIPELINE
+  // bit 0: which half of each entry in outputbuffer contains valid data (if DSTOUT is 1)
+  // bit 7: whether entry in outputbuffer is in use (0 = available, 1 = in-use)
+  std::vector< tbb::atomic<int> > outputbuffer_element_state_; // state of each entry of outputbuffer
+  size_t                   aligned_chunksize_;
+  #else
+  void                     *inputbuffer;             // Buffer for reading DataBlocks (chunksize)
+  #endif
+
+  // 32-bit PowerPC does not support tbb::atomic<u64> because it requires the ldarx
+  // instruction which is only available for 64-bit PowerPC CPUs, so...
+  #if __GNUC__ &&  __ppc__
+  // this won't cause any data corruption - it will only cause (possibly) incorrect progress values to be printed
+  u64                       progress;                // How much data has been processed.
+  #else
   tbb::atomic<u64>          progress;                // How much data has been processed.
+  #endif
 #else
-  u64 progress;     // How much data has been processed.
+  void                     *inputbuffer;             // Buffer for reading DataBlocks (chunksize)
+  #if DSTOUT
+  std::vector<int>          outputbuffer_element_state_; // state of each entry of outputbuffer
+  #endif
+
+  u64                       progress;                // How much data has been processed.
 #endif
   u64 totaldata;    // Total amount of data to be processed.
 
@@ -165,6 +188,8 @@ protected:
   tbb::atomic<u32>          cout_in_use; // this is used to display % done w/o blocking a thread
   tbb::tick_count           last_cout;   // when cout was used for output
 #endif
+
+  bool create_dummy_par_files;
 };
 
 #endif // __PAR2CREATOR_H__

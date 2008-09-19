@@ -149,7 +149,7 @@ bool Par2CreatorSourceFile::Open(CommandLine::NoiseLevel noiselevel, const Comma
     char *buffer = new char[buffersize];
 
     // Read the data from the file
-    if (!diskfile->Read(0, buffer, buffersize))
+    if (!cl->GetCreateDummyParFiles() && !diskfile->Read(0, buffer, buffersize))
     {
       diskfile->Close();
       delete [] buffer;
@@ -198,7 +198,7 @@ bool Par2CreatorSourceFile::Open(CommandLine::NoiseLevel noiselevel, const Comma
       want = (size_t)min(filesize-offset, (u64)buffersize);
 
       // Read some data from the file into the buffer
-      if (!diskfile->Read(offset, buffer, want))
+      if (!cl->GetCreateDummyParFiles() && !diskfile->Read(offset, buffer, want))
       {
         diskfile->Close();
         delete [] buffer;

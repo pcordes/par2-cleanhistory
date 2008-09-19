@@ -16,6 +16,12 @@
 //  You should have received a copy of the GNU General Public License
 //  along with this program; if not, write to the Free Software
 //  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+//
+//  Modifications for concurrent processing, async I/O, Unicode support, and
+//  hierarchial directory support are Copyright (c) 2007-2008 Vincent Tan.
+//  Search for "#if WANT_CONCURRENT" for concurrent code.
+//  Concurrent processing utilises Intel Thread Building Blocks 2.0,
+//  Copyright (c) 2007 Intel Corp.
 
 #ifndef __DATABLOCK_H__
 #define __DATABLOCK_H__
@@ -65,6 +71,14 @@ public:
 
   // Write some of the data from memory to disk
   bool WriteData(u64 position, size_t size, const void *buffer, size_t &wrote);
+
+#if HAVE_ASYNC_IO
+  bool ReadDataAsync(aiocb_type& cb, u64 position, size_t size, void *buffer);
+
+  // parm 'wrote' is actually a promise, not a fact; this fn will write that many bytes if
+  // the write completes OK, but at the time that the fn returns, it hasn't done so yet.
+  bool WriteDataAsync(aiocb_type& cb, u64 position, size_t size, const void *buffer, size_t &wrote);
+#endif
 
 protected:
   DiskFile *diskfile;  // Which disk file is the block associated with

@@ -1,7 +1,9 @@
 #  This file is part of par2cmdline (a PAR 2.0 compatible file verification and
 #  repair tool). See http://parchive.sourceforge.net for details of PAR 2.0.
 #
-#  Copyright (c) 2007-2008 Vincent Tan.
+#  Based on code by Paul Houle (paulhoule.com) March 22, 2008.
+#  Copyright (c) 2008 Paul Houle
+#  Copyright (c) 2008 Vincent Tan.
 #
 #  par2cmdline is free software; you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -25,13 +27,35 @@
 #
 
 #
-# reedsolomon-inner-i386-darwin.s
+#  detect-mmx.s
 #
-# void ReedSolomonInnerLoop(const u32* src, const u32* end, u32* dst,
-#                           const u16* L, const u16* H);
-#
-	.private_extern _ReedSolomonInnerLoop
-	.text
-_ReedSolomonInnerLoop:
+    .globl detect_mmx
+    .text
+detect_mmx:
+	push	%ebx
 
-#include "reedsolomon-inner-i386.s"
+    pushf                                 # try to flip "ID" bit in eflags
+    pop     %eax
+    btc     $21, %eax
+    push    %eax
+    popf 
+    pushf 
+    pop     %ecx
+    xor     %eax, %ecx                    # bit 21 == 0 if "ID" bit changed
+    xor     %eax, %eax
+    bt      $21, %ecx
+    jc      fset                          # jmp= no CPUID, no advanced opcodes
+    cpuid                                 # eax= highest supported CPUID function
+    test    %eax, %eax
+    jz      fset                          # jmp= can't get features
+    mov     $1, %eax                      # get features
+    cpuid
+    xor     %eax, %eax
+    test    $1, %edx                      # floating point?
+    jz      fset                          # jmp= no, so no MMX
+    bt      $23, %edx                     # MMX support?
+    jnc     fset                          # jmp= nope
+    inc     %eax                          # indicate MMX
+fset:
+    pop     %ebx
+    ret

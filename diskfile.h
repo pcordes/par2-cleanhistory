@@ -17,8 +17,8 @@
 //  along with this program; if not, write to the Free Software
 //  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 //
-//  Modifications for concurrent processing, Unicode support, and hierarchial
-//  directory support are Copyright (c) 2007-2008 Vincent Tan.
+//  Modifications for concurrent processing, async I/O, Unicode support, and
+//  hierarchial directory support are Copyright (c) 2007-2008 Vincent Tan.
 //  Search for "#if WANT_CONCURRENT" for concurrent code.
 //  Concurrent processing utilises Intel Thread Building Blocks 2.0,
 //  Copyright (c) 2007 Intel Corp.
@@ -36,15 +36,20 @@ public:
   ~DiskFile(void);
 
   // Create a file and set its length
-  bool Create(string filename, u64 filesize);
+  bool Create(string filename, u64 filesize, bool async = false);
 
   // Write some data to the file
   bool Write(u64 offset, const void *buffer, size_t length);
 
+#if HAVE_ASYNC_IO
+  bool ReadAsync(aiocb_type& cb, u64 offset, void *buffer, size_t length);
+  bool WriteAsync(aiocb_type& cb, u64 offset, const void *buffer, size_t length);
+#endif
+
   // Open the file
-  bool Open(void);
-  bool Open(string filename);
-  bool Open(string filename, u64 filesize);
+  bool Open(bool async = false);
+  bool Open(string filename, bool async = false);
+  bool Open(string filename, u64 filesize, bool async = false);
 
   // Check to see if the file is open
 #ifdef WIN32

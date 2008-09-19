@@ -107,7 +107,7 @@ public:
   CommandLine::Version   GetVersion(void) const            {return version;}
   u64                    GetBlockSize(void) const          {return blocksize;}
   u32                    GetBlockCount(void) const         {return blockcount;}
-  u32                    GetRedundancy(void) const         {return redundancy;}
+  float                  GetRedundancy(void) const         {return redundancy;}
   u32                    GetFirstRecoveryBlock(void) const {return firstblock;}
   u32                    GetRecoveryFileCount(void) const  {return recoveryfilecount;}
   u32                    GetRecoveryBlockCount(void) const {return recoveryblockcount;}
@@ -123,6 +123,8 @@ public:
 #if WANT_CONCURRENT
   unsigned               GetConcurrentProcessingLevel(void) const { return concurrent_processing_level; }
 #endif
+
+  bool                   GetCreateDummyParFiles(void) const { return create_dummy_par_files; }
 
   string                              GetParFilename(void) const {return parfilename;}
   const list<CommandLine::ExtraFile>& GetExtraFiles(void) const  {return extrafiles;}
@@ -149,7 +151,7 @@ protected:
   u32 recoveryblockcount;      // How many recovery blocks should be created.
   bool recoveryblockcountset;  // Set if the recoveryblockcount as been specified
 
-  u32 redundancy;              // What percentage of recovery data should
+  float redundancy;            // What percentage of recovery data should
                                // be created.
   bool redundancyset;          // Set if the redundancy has been specified
 
@@ -184,6 +186,7 @@ protected:
   // recommends not using it in production code), so this is merely a bool:
   unsigned concurrent_processing_level; // whether to process serially or concurrently
 #endif
+  bool create_dummy_par_files; // so that final par2 size can be determined
 };
 
 typedef list<CommandLine::ExtraFile>::const_iterator ExtraFileIterator;

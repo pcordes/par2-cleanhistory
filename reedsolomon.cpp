@@ -3,6 +3,12 @@
 //
 //  Copyright (c) 2003 Peter Brian Clements
 //
+//  Modifications for better scalar code generation using the Visual C++ compiler
+//  are Copyright (c) 2007-2008 Vincent Tan.
+//
+//  MMX functions are based on code by Paul Houle (paulhoule.com) March 22, 2008,
+//  and are Copyright (c) 2008 Paul Houle and Vincent Tan.
+//
 //  par2cmdline is free software; you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
 //  the Free Software Foundation; either version 2 of the License, or
@@ -101,7 +107,8 @@ template <> bool ReedSolomon<Galois8>::SetInput(u32 count)
   return true;
 }
 
-template <> bool ReedSolomon<Galois8>::InternalProcess(const Galois8 &factor, size_t size, const void *inputbuffer, void *outputbuffer)
+template <> bool ReedSolomon<Galois8>::InternalProcess(
+  const Galois8 &factor, size_t size, const void *inputbuffer, void *outputbuffer)
 {
 #ifdef LONGMULTIPLY
   // The 8-bit long multiplication tables
@@ -262,13 +269,216 @@ template <> bool ReedSolomon<Galois16>::SetInput(u32 count)
 
 
 #ifdef LONGMULTIPLY
-  #if __GNUC__ && __i386__
-  extern "C" void ReedSolomonInnerLoop(const u32* src, const u32* end, u32* dst,
-                                       const u16* L, const u16* H);
+
+  #if __GNUC__ && (__i386__ || __x86_64__)
+    #include <sys/types.h>
+    #include <sys/sysctl.h>
+
+    #if __x86_64__
+      extern "C" void rs_process_x86_64_scalar(void* dst, const void* src, size_t size, const u32* LH);
+    #else // __i386__
+      extern "C" void rs_process_i386_scalar(void* dst, const void* src, size_t size, const u32* LH);
+    #endif
   #endif
+
+  namespace DetectVectorUnit {
+    namespace internal {
+      static bool HasVectorUnit(void);
+    }
+
+    static const bool hasVectorUnit = internal::HasVectorUnit();
+  }
+
+  #if __GNUC__ && (__i386__ || __x86_64__)
+    #include <sys/types.h>
+    #include <sys/sysctl.h>
+
+    #if __x86_64__
+  extern "C" void rs_process_x86_64_mmx(void* dst, const void* src, size_t size, const u32* LH);
+//extern "C" void rs_process_x86_64_sse2(void* dst, const void* src, size_t size, const u32* LH);
+    #else // __i386__
+  extern "C" void rs_process_i686_mmx(void* dst, const void* src, size_t size, const u32* LH);
+//extern "C" void rs_process_i686_sse2(void* dst, const void* src, size_t size, const u32* LH);
+    #endif
+
+/* GCC produces reasonably good code but it is not as good as the hand-written assembly because
+   it produces too much register-to-stack-frame-and-back-again traffic, so it's disabled and
+   the .s files are used instead. FWIW, VC++ definitely produces better code.
+
+  #define rs_process_i686_mmx rs_process_simd
+
+      typedef int v1di __attribute__ ((vector_size (8)));
+      typedef v1di             mm_reg_type;
+      #define mm_xor           __builtin_ia32_pxor
+      #define mm_load32(x)     (mm_reg_type) __builtin_ia32_vec_init_v2si(x, 0)
+      #define mm_store32(x)    __builtin_ia32_vec_ext_v2si(x, 0)
+      #define mm_load64(src)   (*src)
+      #define mm_store64(dst, src) (*dst) = (src)
+      #define mm_unpacklo      __builtin_ia32_punpckldq
+      #define mm_sr            __builtin_ia32_psrldi
+      #define mm_empty         __builtin_ia32_emms()
+
+  static void rs_process_simd(void *outputbuffer, const void *inputbuffer, size_t bsize, const unsigned *LH) {
+    (u8*&) outputbuffer += bsize;
+    (const u8*&) inputbuffer += bsize;
+    for (bsize = -bsize; bsize; bsize += sizeof(u64)) {
+      mm_reg_type s = mm_load64((const mm_reg_type*) (bsize + (const u8*) inputbuffer));
+      u32 tmp = mm_store32(s);
+      u16 sw = tmp >> 16;
+      mm_reg_type s0 = mm_load32(LH[      u8(      tmp >> 0)]); // L
+      mm_reg_type s1 = mm_load32(LH[512 + u8((u16) tmp >> 8)]); // H
+      mm_reg_type s2 = mm_load32(LH[256 + u8(sw >> 0)]);        // preshifted L
+      mm_reg_type s3 = mm_load32(LH[768 + u8(sw >> 8)]);        // preshifted H
+
+      tmp = mm_store32(mm_sr(s, 32));
+      sw = tmp >> 16;
+
+      s = mm_load64((const mm_reg_type*) (bsize + (const u8*) outputbuffer));
+      mm_store64((mm_reg_type*) (bsize + (u8*) outputbuffer), mm_xor(s,
+        mm_xor(mm_xor(mm_unpacklo(s0, mm_load32(LH[      u8(      tmp >> 0)])),
+                mm_unpacklo(s1, mm_load32(LH[512 + u8((u16) tmp >> 8)]))),
+        mm_xor(mm_unpacklo(s2, mm_load32(LH[256 + u8(sw >> 0)])),
+                mm_unpacklo(s3, mm_load32(LH[768 + u8(sw >> 8)]))))));
+    }
+    mm_empty;
+  } */
+
+  extern "C" int detect_mmx(void);
+
+  namespace DetectVectorUnit {
+    // The asm code for x86 and x64 processes in 8-byte chunks.
+    enum { sizeof_work_unit = sizeof(u64) };
+    //enum { sizeof_work_unit = 64 }; // sizeof 1 L1 cache line
+
+    namespace internal {
+      static bool HasVectorUnit(void) {
+    #if __APPLE__ || __x86_64__
+        // For Darwin/MacOSX, x86 always executes on MMX-capable CPUs. x64 CPUs always have MMX/SSE/SSE2.
+        return true;
+    #else // other 32-bit x86 POSIX systems:
+        return 0 != detect_mmx();
+    #endif
+      }
+    }
+  }
+
+  #elif defined(_MSC_VER) // Visual C++ compiler
+
+    #if defined(WIN64)
+      #include <emmintrin.h>
+      typedef __m128i          mm_reg_type;
+      #define mm_xor           _mm_xor_si128
+      #define mm_load32        _mm_cvtsi32_si128
+      #define mm_store32       _mm_cvtsi128_si32
+      #define mm_load64        _mm_loadl_epi64
+      #define mm_store64       _mm_storel_epi64
+      #define mm_unpacklo      _mm_unpacklo_epi32
+      #define mm_sr64          _mm_srli_epi64
+      #define mm_sl32          _mm_slli_epi32
+      #define mm_empty
+
+  namespace DetectVectorUnit {
+    // The asm code for x64 processes in 8-byte chunks.
+    enum { sizeof_work_unit = sizeof(u64) };
+
+    namespace internal {
+      static bool HasVectorUnit(void) {
+        return true;
+      }
+    }
+  }
+    #else // WIN32
+      #include <mmintrin.h>
+      typedef __m64            mm_reg_type;
+      #define mm_xor           _mm_xor_si64
+      #define mm_load32        _mm_cvtsi32_si64
+      #define mm_store32       _mm_cvtsi64_si32
+      #define mm_load64(src)   (*src)
+      #define mm_store64(dst, src) (*dst) = (src)
+      #define mm_unpacklo      _mm_unpacklo_pi32
+      #define mm_sr64          _mm_srli_si64
+      #define mm_sl32          _mm_slli_pi32
+      #define mm_empty         _mm_empty()
+
+  namespace DetectVectorUnit {
+    // The asm code for x86 processes in 8-byte chunks.
+    enum { sizeof_work_unit = sizeof(u64) };
+
+    namespace internal {
+      static bool HasVectorUnit(void) {
+        return FALSE != IsProcessorFeaturePresent(PF_MMX_INSTRUCTIONS_AVAILABLE);
+      }
+    }
+  }
+    #endif
+
+  // This function is based in part on code by Paul Houle.
+  // The original code used inlined assembly, but this version uses the Visual C++ compiler
+  // instrinsics so that the same function can be compiled for both x86 (using MMX) and x64
+  // (using SSE2), because the x64 C++ compiler does not support inlined assembly. The VC++
+  // compiler does a pretty good job of instruction scheduling - not quite as good as the
+  // hand-written assembly (IMHO) but good enough. It certainly produces better code than GCC.
+  static void rs_process_simd(void *outputbuffer, const void *inputbuffer, size_t bsize, const unsigned *LH) {
+    (u8*&) outputbuffer += bsize;
+    (const u8*&) inputbuffer += bsize;
+    for (bsize = -bsize; bsize; bsize += sizeof(__m64)) {
+      mm_reg_type s = mm_load64((const mm_reg_type*) (bsize + (const u8*) inputbuffer));
+      u32 tmp = mm_store32(s);
+      u16 sw = tmp >> 16;
+    #if 1
+      mm_reg_type s0 = mm_load32(LH[      u8(      tmp >> 0)]); // L
+      mm_reg_type s1 = mm_load32(LH[256 + u8((u16) tmp >> 8)]); // H
+      mm_reg_type s2 = mm_load32(LH[      u8(sw >> 0)]);        // L
+      mm_reg_type s3 = mm_load32(LH[256 + u8(sw >> 8)]);        // H
+    #else
+      mm_reg_type s0 = mm_load32(LH[      u8(      tmp >> 0)]); // L
+      mm_reg_type s1 = mm_load32(LH[512 + u8((u16) tmp >> 8)]); // H
+      mm_reg_type s2 = mm_load32(LH[256 + u8(sw >> 0)]);        // preshifted L
+      mm_reg_type s3 = mm_load32(LH[768 + u8(sw >> 8)]);        // preshifted H
+    #endif
+      s = mm_sr64(s, 32);
+      tmp = mm_store32(s);
+      sw = tmp >> 16;
+    #if 1
+      s0 = mm_unpacklo(s0, mm_load32(LH[      u8(      tmp >> 0)]));
+      s1 = mm_unpacklo(s1, mm_load32(LH[256 + u8((u16) tmp >> 8)]));
+      s2 = mm_unpacklo(s2, mm_load32(LH[      u8(sw >> 0)]));   // L
+      s3 = mm_unpacklo(s3, mm_load32(LH[256 + u8(sw >> 8)]));   // H
+    #else
+      s0 = mm_unpacklo(s0, mm_load32(LH[      u8(      tmp >> 0)]));
+      s1 = mm_unpacklo(s1, mm_load32(LH[512 + u8((u16) tmp >> 8)]));
+      s2 = mm_unpacklo(s2, mm_load32(LH[256 + u8(sw >> 0)]));   // preshifted L
+      s3 = mm_unpacklo(s3, mm_load32(LH[768 + u8(sw >> 8)]));   // preshifted H
+    #endif
+
+      s = mm_load64((const mm_reg_type*) (bsize + (const u8*) outputbuffer));
+      s1 = mm_xor(s0, s1);
+    #if 1
+      s3 = mm_sl32(mm_xor(s2, s3), 16);
+    #else
+      s3 = mm_xor(s2, s3);
+    #endif
+      s3 = mm_xor(s1, s3);
+      s = mm_xor(s, s3);
+      mm_store64((mm_reg_type*) (bsize + (u8*) outputbuffer), s);
+    }
+    mm_empty;
+  }
+
+  #else
+  namespace DetectVectorUnit {
+    enum { sizeof_work_unit = sizeof(u8) };
+
+    namespace internal {
+      static bool HasVectorUnit(void) { return false; }
+    }
+  }
+  #endif
+
 #endif
 
-template <> bool ReedSolomon<Galois16>::InternalProcess(const Galois16 &factor, size_t size, const void *inputbuffer, void *outputbuffer)
+template <> bool ReedSolomon<Galois16>::InternalProcess(
+  const Galois16 &factor, size_t size, const void *inputbuffer, void *outputbuffer)
 {
 #ifdef LONGMULTIPLY
   // The 8-bit long multiplication tables
@@ -285,15 +495,16 @@ template <> bool ReedSolomon<Galois16>::InternalProcess(const Galois16 &factor, 
   Galois16 *HH = &table[(2*256 + fh) * 256 + 0]; // factor.high * source.high
 
   // Combine the four multiplication tables into two
-  #if __GNUC__ && __i386__
-  typedef unsigned short LHEntry;
-  LHEntry L[256];
-  LHEntry H[256];
-  #else
   typedef unsigned int LHEntry;
-  LHEntry L[512]; // Double the space required but
-  LHEntry H[512]; // save ONE shift instruction.
-  #endif
+//LHEntry L[512]; // Double the space required but
+//LHEntry H[512]; // save ONE shift instruction.
+  // mult tables (using an array of ints forces the compiler to align on a 4-byte boundary):
+  LHEntry lhTable[256*2 *1];
+  LHEntry* L = &lhTable[0];
+  LHEntry* H = &lhTable[256];
+//LHEntry lhTable[256*2 *2];
+//LHEntry* L = &lhTable[0];
+//LHEntry* H = &lhTable[512];
 
   #if __BYTE_ORDER == __LITTLE_ENDIAN
   LHEntry *pL = &L[0];
@@ -317,10 +528,7 @@ template <> bool ReedSolomon<Galois16>::InternalProcess(const Galois16 &factor, 
       LL++;
       HL+=256;
 
-  #if __GNUC__ && __i386__
-  #else
-      pL[255] = temp << 16;
-  #endif
+      //pL[255] = temp << 16;
     }
 
     {
@@ -334,48 +542,117 @@ template <> bool ReedSolomon<Galois16>::InternalProcess(const Galois16 &factor, 
       LH++;
       HH++;
 
-  #if __GNUC__ && __i386__
-  #else
-      pH[255] = temp << 16;
-  #endif
+      //pH[255] = temp << 16;
     }
   }
 
-  #if __GNUC__ && __i386__
-
-  ReedSolomonInnerLoop((const u32*) inputbuffer, (const u32*) &((u8*)inputbuffer)[size],
-                       (u32 *)outputbuffer, L, H);
-
+  if (DetectVectorUnit::hasVectorUnit) {
+    enum { sizeof_work_unit = DetectVectorUnit::sizeof_work_unit };
+    // asz = alignment size = # of bytes to process using scalar code before vector code can be used
+    // vsz = vector size = # of bytes to process using vector code
+    size_t asz = (sizeof_work_unit - (uintptr_t) inputbuffer) & (sizeof_work_unit-1); // 0...(sizeof_work_unit-1)
+    size_t vsz = (size-asz) & ~(sizeof_work_unit-1);
+    if (vsz) {
+      if (asz) {
+  #if __GNUC__ &&  __x86_64__
+        rs_process_x86_64_scalar(outputbuffer, inputbuffer, asz, lhTable);
+  #elif __GNUC__ &&  __i386__
+        rs_process_i386_scalar(outputbuffer, inputbuffer, asz, lhTable);
   #else
-
-  // Treat the buffers as arrays of 32-bit unsigned ints.
-  u32 *src = (u32 *)inputbuffer;
-  u32 *end = (u32 *)&((u8*)inputbuffer)[size];
-  u32 *dst = (u32 *)outputbuffer;
+        // Treat the buffers as arrays of 32-bit unsigned ints.
+        u32 *src = (u32 *)inputbuffer;
+        u32 *end = (u32 *)&((u8*)inputbuffer)[asz];
+        u32 *dst = (u32 *)outputbuffer;
   
-  // Process the data
-  do {
-    u32 s = *src++;
+        // Process the data
+        do {
+          u32 s = *src++;
 
-    // Use the two lookup tables computed earlier
+          // Use the two lookup tables computed earlier
 
-    // Visual C++ generates better code with this version (mostly because of the casts):
-	u16 sw = u16(s >> 16);
-	u32 d  = (L+256)[u8(sw >> 0)]; // use pre-shifted entries
-        d ^= (H+256)[u8(sw >> 8)]; // use pre-shifted entries
-        d ^= *dst ^ (L[u8(       s  >>  0)]      )
-                  ^ (H[u8(((u16) s) >>  8)]      )
-                  ; // <- one shift instruction eliminated
+          // Visual C++ generates better code with this version (mostly because of the casts):
+          u16 sw = u16(s >> 16);
+          u32 d  = L[u8(sw >> 0)];
+              d ^= H[u8(sw >> 8)];
+              d <<= 16;
+              d ^= *dst ^ (L[u8(       s  >>  0)]      )
+                        ^ (H[u8(((u16) s) >>  8)]      );
+        //u32 d  = (L+256)[u8(sw >> 0)]; // use pre-shifted entries
+        //    d ^= (H+256)[u8(sw >> 8)]; // use pre-shifted entries
+        //    d ^= *dst ^ (L[u8(       s  >>  0)]      )
+        //              ^ (H[u8(((u16) s) >>  8)]      );
 
-    // the original version (too many shift's and and's):
-  //u32 d = *dst ^ (L[(s >> 0) & 0xff]      )
-  //             ^ (H[(s >> 8) & 0xff]      )
-  //             ^ (L[(s >> 16)& 0xff] << 16)
-  //             ^ (H[(s >> 24)& 0xff] << 16);
-    *dst++ = d;
-  } while (src < end);
+          // the original version (too many shift's and and's):
+        //u32 d = *dst ^ (L[(s >> 0) & 0xff]      )
+        //             ^ (H[(s >> 8) & 0xff]      )
+        //             ^ (L[(s >> 16)& 0xff] << 16)
+        //             ^ (H[(s >> 24)& 0xff] << 16);
+          *dst++ = d;
+        } while (src < end);
 
   #endif
+        (u8*&) outputbuffer += asz;
+        (u8*&) inputbuffer  += asz;
+        size -= asz;
+      } // if (asz)
+
+  #if __GNUC__ &&  __x86_64__
+      rs_process_x86_64_mmx(outputbuffer, inputbuffer, vsz, lhTable);
+  #elif __GNUC__ &&  __i386__
+      rs_process_i686_mmx(outputbuffer, inputbuffer, vsz, lhTable);
+    //rs_process_i686_sse2(outputbuffer, inputbuffer, vsz, lhTable);
+  #elif defined(WIN64) || defined(WIN32)
+      rs_process_simd(outputbuffer, inputbuffer, vsz, lhTable);
+  #else
+      vsz = 0; // no SIMD unit, so set vsz = 0
+  #endif
+
+      (u8*&) outputbuffer += vsz;
+      (u8*&) inputbuffer  += vsz;
+      size -= vsz;
+    } // if (vsz)
+  }
+
+  if (size) {
+  #if __GNUC__ && __x86_64__
+    rs_process_x86_64_scalar(outputbuffer, inputbuffer, size, lhTable);
+  #elif __GNUC__ &&  __i386__
+    rs_process_i386_scalar(outputbuffer, inputbuffer, size, lhTable);
+  #else // only Visual C++ produces decent x86 code for the following:
+    // Treat the buffers as arrays of 32-bit unsigned ints.
+    u32 *src = (u32 *)inputbuffer;
+    u32 *end = (u32 *)&((u8*)inputbuffer)[size];
+    u32 *dst = (u32 *)outputbuffer;
+  
+    // Process the data
+    do {
+      u32 s = *src++;
+
+      // Use the two lookup tables computed earlier
+
+      // Visual C++ generates better code with this version (mostly because of the casts):
+      u16 sw = u16(s >> 16);
+      u32 d  = L[u8(sw >> 0)];
+          d ^= H[u8(sw >> 8)];
+          d <<= 16;
+          d ^= *dst ^ (L[u8(       s  >>  0)]      )
+                    ^ (H[u8(((u16) s) >>  8)]      );
+    /*u32 d  = (L+256)[u8(sw >> 0)]; // use pre-shifted entries
+          d ^= (H+256)[u8(sw >> 8)]; // use pre-shifted entries
+          d ^= *dst ^ (L[u8(       s  >>  0)]      )
+                    ^ (H[u8(((u16) s) >>  8)]      )
+                    ; // <- one shift instruction eliminated*/
+
+      // the original version (too many shift's and and's):
+    //u32 d = *dst ^ (L[(s >> 0) & 0xff]      )
+    //             ^ (H[(s >> 8) & 0xff]      )
+    //             ^ (L[(s >> 16)& 0xff] << 16)
+    //             ^ (H[(s >> 24)& 0xff] << 16);
+      *dst++ = d;
+    } while (src < end);
+
+  #endif
+  }
 #else
   // Treat the buffers as arrays of 16-bit Galois values.
 

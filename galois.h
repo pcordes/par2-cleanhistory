@@ -48,9 +48,19 @@ public:
     Limit = Count-1,
     Generator = generator,
   };
-
+#if __APPLE__
+  // Using fixed sized arrays in a static variable causes a blowout in the __DATA segment
+  // which can be reduced by making the tables heap-based instead of __DATA segment based.
+  ~GaloisTable(void) {
+    delete [] log;
+    delete [] antilog;
+  }
+  ValueType* log;
+  ValueType* antilog;
+#else
   ValueType log[Count];
   ValueType antilog[Count];
+#endif
 };
 
 template <const unsigned int bits, const unsigned int generator, typename valuetype>
@@ -133,6 +143,11 @@ public:
 template <const unsigned int bits, const unsigned int generator, typename valuetype>
 inline GaloisTable<bits,generator,valuetype>::GaloisTable(void)
 {
+#if __APPLE__
+  log = new ValueType[Count];
+  antilog = new ValueType[Count];
+#endif
+
   u32 b = 1;
 
   for (u32 l=0; l<Limit; l++)
