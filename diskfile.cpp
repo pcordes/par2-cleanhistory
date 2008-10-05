@@ -46,13 +46,15 @@ static char THIS_FILE[]=__FILE__;
 
 DiskFile::DiskFile(void)
 {
-  filename;
+  //filename;
   filesize = 0;
   offset = 0;
 
   hFile = INVALID_HANDLE_VALUE;
 
   exists = false;
+
+  blockcount = 0;
 }
 
 DiskFile::~DiskFile(void)
@@ -415,6 +417,8 @@ DiskFile::DiskFile(void)
   file = 0;
 
   exists = false;
+
+  blockcount = 0;
 }
 
 DiskFile::~DiskFile(void)

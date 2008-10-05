@@ -119,7 +119,8 @@ ra->second.push_back(ib->sourceindex_);
             if (ib_needs_releasing)
               release(ib);
 
-            if (++a->second.first == bc) {
+            const u32 idx = ++a->second.first;
+            if (idx == bc) {
               // there should be no buffers waiting to be hashed:
               assert(a->second.second.size() == 0);
               //assert(!a->second.second.find(ia, ib->sourceindex_));
@@ -129,14 +130,14 @@ ra->second.push_back(ib->sourceindex_);
               (bool) shm_.erase(a);
 #endif
               break;
-            } else if (a->second.second.find(ia, a->second.first)) { // can any deferred buffers now be used up?
-//printf("found %u in deferred_list\n", a->second.first);
+            } else if (a->second.second.find(ia, idx)) { // can any deferred buffers now be used up?
+//printf("found %u in deferred_list\n", idx);
               ib = ia->second;
               ib_needs_releasing = true;
 
               a->second.second.erase(ia);
             } else {
-//printf("did not find %u in deferred_list\n", a->second.first);
+//printf("did not find %u in deferred_list\n", idx);
               break;
             }
           } // for
@@ -1417,7 +1418,7 @@ bool Par2Creator::ProcessData(u64 blockoffset, size_t blocklength)
     //create_filter_write cfw(*this, s);
     //p.add_filter(cfw);
 
-    p.run(tbb::task_scheduler_init::default_num_threads() + 1);
+    p.run(ALL_SERIAL == concurrent_processing_level ? 1 : tbb::task_scheduler_init::default_num_threads());
     p.clear();
 
     if (!s.is_ok()) {

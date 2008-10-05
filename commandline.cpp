@@ -457,7 +457,7 @@ void CommandLine::usage(void)
     // 2007/10/21
     "  -d<dir>: root directory for paths to be put in par2 files OR root directory for files to repair from par2 files\n"
     // 2008/07/07
-    "  -0: create dummy par2 files - for getting actual final par2 files sizes without doing any computing\n"
+    "  -0     : create dummy par2 files - for getting actual final par2 files sizes without doing any computing\n"
     "  --     : Treat all remaining CommandLine as filenames\n"
     "\n"
     "If you wish to create par2 files for a single source file, you may leave\n"

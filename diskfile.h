@@ -80,6 +80,9 @@ public:
   // Delete the file
   bool Delete(void);
 
+  u32  GetBlockCount(void) const { return blockcount; }
+  void SetBlockCount(u32 bc) { blockcount = bc; }
+
 public:
   static string GetCanonicalPathname(string filename);
 
@@ -109,6 +112,8 @@ protected:
 
   // Does the file exist
   bool   exists;
+
+  u32    blockcount;
 
 protected:
 #ifdef WIN32

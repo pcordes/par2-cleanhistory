@@ -85,7 +85,8 @@
 
   class pipeline_state_base {
   public:
-    typedef tbb::concurrent_hash_map<DiskFile*, DiskFile*, intptr_hasher<DiskFile*> >  DiskFile_map_type;
+    // DiskFile* -> # of data-blocks in the DiskFile yet to be read in
+    typedef tbb::concurrent_hash_map<DiskFile*, u32, intptr_hasher<DiskFile*> >  DiskFile_map_type;
 
   private:
     const u64                                    chunksize_;
@@ -149,12 +150,15 @@
       return inputindex_++;
 	}
 
-    bool                                         find_diskfile(DiskFile_map_type::const_accessor& a, DiskFile* key) {
-      return openfiles_.find(a, key);
-    }
-    bool                                         insert_diskfile(DiskFile_map_type::accessor& a, DiskFile* key) {
-      return openfiles_.insert(a, key);
-    }
+    template <typename ACCESSOR>
+    bool   find_diskfile(ACCESSOR& a, DiskFile* key) { return openfiles_.find(a, key); }
+    template <typename ACCESSOR>
+    bool   insert_diskfile(ACCESSOR& a, DiskFile* key) { return openfiles_.insert(a, key); }
+    template <typename ACCESSOR>
+    bool   remove_diskfile(ACCESSOR& a) { return openfiles_.erase(a); }
+  #ifndef NDEBUG
+    size_t open_diskfile_count(void) const { return openfiles_.size(); }
+  #endif
   };
 
   template <typename BUFFER>
@@ -214,8 +218,11 @@
     typedef pipeline_state<BUFFER> state_type;
     state_type& state_;
   public:
+    // Because async reads don't reliably work (the call to aio_suspend() sometimes never returns),
+    // reads are now done synchronously, and thus this stage is now serial (because reading from
+    // the same file from two or more threads at the same time is undefined behaviour).
     filter_read_base(state_type& s) :
-      tbb::filter(false /* tbb::filter::parallel */), state_(s) {}
+      tbb::filter(true /* tbb::filter::serial */ /* false tbb::filter::parallel */), state_(s) {}
     virtual void* operator()(void*);
   };
 
@@ -257,7 +264,7 @@
     { // if the file is not opened then do only one open call
       DiskFile* df = (*inputblock)->GetDiskFile();
 
-      typename state_type::DiskFile_map_type::const_accessor fa;
+      typename state_type::DiskFile_map_type::accessor fa;
       while (!state_.find_diskfile(fa, df)) {
 //printf("opening DiskFile %s\n", df->FileName().c_str());
         // if this thread was the one that inserted df into the map then open the file
@@ -272,25 +279,37 @@
         if (state_.insert_diskfile(ia, df)) {
           // The winner gets here and is the one responsible for opening file;
           // other threads trying to access 'df' will now block in the find() call above.
-          if (!df->Open(true)) { // open file for async I/O
+          if (!df->Open(false/*true*/)) { // open file for sync I/O
 //printf("opening DiskFile %s failed\n", df->FileName().c_str());
             state_.set_not_ok();
             return NULL;
           }
+          ia->second = df->GetBlockCount(); // how many blocks to read from the DiskFile
 
           // Release the accessor lock 'ia' and thus allow other threads to access the
           // now-open file. Now that df is in the map, the 'fa' accessor can acquire it.
         } else {
-          // The loser must try again until it has read-only access to the key 'df' via the
-          // above find(), because although the file is now in the hash_map, it may not yet be open.
+          // The loser must try again until it has access to the key 'df' via the above
+          // find(), because although the file is now in the hash_map, it may not yet be open.
         }
       }
 
-      // since the data is read/written asynchronously, the const_accessor 'fa' can be released
+      // (if the data were read asynchronously, 'fa' can be released)
     }
 
     {
       // Read data from the current input block
+  #if 1
+      if (!(*inputblock)->ReadData(state_.blockoffset(), state_.blocklength(), inputbuffer->get()) ||
+          !static_cast<SUBCLASS*> (this)->on_inputbuffer_read(inputbuffer)) {
+        state_.set_not_ok();
+        state_.release(inputbuffer);
+        return NULL;
+      }
+  #else
+      // on Mac OS X 10.5.5, suspend_until_completed() does not return if async requests are made
+      // too frequently (it smells like an OS bug because when the requests occur further apart in
+      // time, the suspension does end), so this code block is disabled:
       if (!(*inputblock)->ReadDataAsync(inputbuffer->get_aiocb(), state_.blockoffset(),
                                         state_.blocklength(), inputbuffer->get())) {
 //printf("start reading DiskFile %s failed\n", (*inputblock)->GetDiskFile()->FileName().c_str());
@@ -308,6 +327,29 @@
         state_.set_not_ok();
         state_.release(inputbuffer);
         return NULL;
+      }
+  #endif
+
+      { // decr block count
+        DiskFile* df = (*inputblock)->GetDiskFile();
+
+        // the count is currently stored in the DiskFile_map_type but it could also be in the DiskFile class;
+        // using an accessor here ensures mutual exclusion to the decrement; if moved to DiskFile, the count
+        // should be changed to a tbb::atomic<u32> instead of a bare u32.
+        typename state_type::DiskFile_map_type::accessor fa;
+        if (!state_.find_diskfile(fa, df)) {
+          cerr << "unable to decrement " << (*inputblock)->GetDiskFile()->FileName() << " (this should not occur)" << endl;
+          state_.set_not_ok();
+          state_.release(inputbuffer);
+          return NULL;
+        }
+
+//printf("%s --bc => %u\n", df->FileName().c_str(), fa->second - 1);
+        if (0 == --fa->second) { // last block was just read in so file can be closed
+          df->Close();
+//printf("%s was closed\n", df->FileName().c_str());
+          state_.remove_diskfile(fa);
+        }
       }
     }
 
@@ -346,9 +388,7 @@
       inputbuffer->set_write_status(buffer::NONE);
     }
 
-//printf("filter_process_base::operator() -> %p=inputbuffer->release()\n", inputbuffer);
     state_.release(inputbuffer);
-//printf("released buffer %u\n", inputbuffer - filter_read::inputbuffers_);
     return NULL;
   }
 

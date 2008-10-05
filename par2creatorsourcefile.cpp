@@ -131,6 +131,7 @@ bool Par2CreatorSourceFile::Open(CommandLine::NoiseLevel noiselevel, const Comma
 
   // Create the diskfile object
   diskfile  = new DiskFile;
+  diskfile->SetBlockCount(blockcount);
 
   // Open the source file
   if (!diskfile->Open(diskfilename, filesize))

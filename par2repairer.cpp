@@ -634,6 +634,8 @@ bool Par2Repairer::LoadPacketsFromFile(string filename)
       cout << endl;
     }
 
+    diskfile->SetBlockCount(recoverypackets); // for tbb::pipeline repairer
+
     // Remember that the file was processed
 #ifndef NDEBUG
     bool success = diskFileMap.Insert(diskfile);
@@ -2196,6 +2198,8 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
     }
   }
 
+  diskfile->SetBlockCount(count); // for tbb::pipeline repairer
+
   return true;
 }
 
@@ -2799,7 +2803,7 @@ bool Par2Repairer::ProcessData(u64 blockoffset, size_t blocklength)
     //repair_filter_write rfw(*this, s);
     //p.add_filter(rfw);
 
-    p.run(tbb::task_scheduler_init::default_num_threads() + 1);
+    p.run(ALL_SERIAL == concurrent_processing_level ? 1 : tbb::task_scheduler_init::default_num_threads());
     p.clear();
 
     if (!s.is_ok()) {

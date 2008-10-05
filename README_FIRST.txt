@@ -28,6 +28,7 @@ The Intel Threading Building Blocks 2.1 library is obtained from:
 
 http://osstbb.intel.com/
 
+
 The licensing of this source code has not been modified: it is still published
 under the GPLv2 (or later), and the COPYING file is included in this
 distribution as per the GPL.
@@ -83,10 +84,11 @@ files from the distribution folder.
 --- Installing the pre-built Linux version ---
 
 
-The Linux version is a 32-bit i386 build of the concurrent version of
-par2cmdline 0.4 for GNU/Linux kernel version 2.6 with GCC 4. It is
-distributed as an executable (par2) along with the required Intel
-Threading Building Blocks 2.1 library (libtbb.so).
+The Linux versions are a 32-bit i386 and 64-bit x86_64 build of the
+concurrent version of par2cmdline 0.4 for GNU/Linux kernel version 2.6
+with GCC 4. It is distributed as an executable (par2) along with the
+required Intel Threading Building Blocks 2.1 library (libtbb.so). There
+are separate distributions for the 32-bit and 64-bit versions.
 
 To install, place the par2 and libtbb.so files in a folder and
 invoke them from the command line.
@@ -99,6 +101,9 @@ files from the distribution folder.
 
 
 Both the 32-bit and 64-bit binaries were built using RELEASE 7.0 of FreeBSD.
+It is distributed as an executable (par2) along with the required Intel
+Threading Building Blocks 2.1 library (libtbb.so). There are separate
+distributions for the 32-bit and 64-bit versions.
 
 To install: copy libtbb.so to /usr/local/lib, copy par2 to a convenient
 location, eg, /usr/local/bin, then remove the distribution directory. You
@@ -123,22 +128,22 @@ or manually modify the Makefile to use the appropriate paths. The tbbvars.sh
 file is in the tbb<version>oss_src/build directory. To manually modify the
 Makefile:
 
-  In `Makefile.am', go to line 59 (Darwin/Mac OS X):
+  In `Makefile.am', for Darwin/Mac OS X, change the AM_CXXFLAGS line to:
 
 AM_CXXFLAGS = -Wall -I../tbb21_009oss/include -gfull -O3 -fvisibility=hidden -fvisibility-inlines-hidden
 
-  or line 63 (other POSIX systems):
+  or for other POSIX systems, change the AM_CXXFLAGS line to:
 
 AM_CXXFLAGS = -Wall -I../tbb21_009oss/include
 
 and modify the path to wherever your extracted Intel TBB files are. Note that it
 should point at the `include' directory inside the main tbb directory.
 
-For linking, `Makefile.am' line 57:
+For linking, the file `Makefile.am' has this line:
 
 LDADD = -lstdc++ -ltbb -L.
 
-has already had the tbb library added to the list of libraries to link against.
+thus the tbb library is already added to the list of libraries to link against.
 You will need to have libtbb.a (or libtbb.dylib or libtbb.so etc.) in your
 library path (usually /usr/lib).
 
@@ -180,7 +185,7 @@ par2 files when those files resided on a SMB server (ie, a shared folder on
 a Windows computer). Combining the mixed-OS executables solves both of these
 problems (see the 20080116 version release notes below for details).
 
-The libtbb.dylib file is built from the TBB 2.0 tbb21_009oss_src.tar.gz
+The libtbb.dylib file is built from the TBB 2.1 tbb21_009oss_src.tar.gz
 distribution. It was built for the x86, ppc, x86_64 and ppc64 architectures
 and will therefore run on all Macs that support 10.4 or 10.5.
 
@@ -231,6 +236,18 @@ Windows 2000.html" file which is located in the "Using VS2005 to ship
 legacy code for XP and Windows 2000" folder. You will also need to copy
 the CxxFrameHandler3_to_CxxFrameHandler.obj file to your
 par2cmdline-0.4-tbb-<version> folder.
+
+To build the 64-bit executable, install the "Windows 2003 Server R2" version
+of the platform SDK and open a command line window for a 64-bit Windows XP
+build environment (in the Platform SDK program group in the Start Menu).
+Change the directory to the par2cmdline-0.4-tbb-<version> directory. Move or
+copy the Makefile in the win64-prebuilt directory to its parent (ie, to the
+par2cmdline-0.4-tbb-<version> directory). Then invoke the 'nmake' command to
+build the binary. The result should be an executable file named
+par2_win64.exe in the par2cmdline-0.4-tbb-<version> directory. This can
+then be renamed to par2.exe if so desired. You should link the executable
+with the tbb20_20080408oss release of the TBB because the 2.1 releases don't
+support the VC7.1 runtime libraries.
 
 
 
@@ -351,6 +368,16 @@ enough memory to not be I/O bound when creating or repairing parity/data files.
 
 --- Version History ---
 
+
+The changes in the 20081005 version are:
+
+- asynchronous reading of a large number of small files would sometimes not complete which
+  caused the program to hang. Fixed by reverting to synchronous reading (most of the benefit
+  of async I/O is from async writing so this change does not affect overall performance).
+- some operating systems have limits on the number of open files which was easily exceeded
+  when a large number of small files are being processed for par2 creation or for repair.
+  Fixed by closing the source files as soon as they are no longer needed to be opened (which
+  is determined by counting how many data blocks the file provides for creation/repair).
 
 The changes in the 20080919 version are:
 
@@ -656,7 +683,7 @@ The changes in the 20070831 version are:
 
 
 Vincent Tan.
-September 19, 2008.
+October 09, 2008.
 
 //
 //  Modifications for concurrent processing, Unicode support, and hierarchial
