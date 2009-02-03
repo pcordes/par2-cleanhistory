@@ -9,6 +9,9 @@
 //  MMX functions are based on code by Paul Houle (paulhoule.com) March 22, 2008,
 //  and are Copyright (c) 2008 Paul Houle and Vincent Tan.
 //
+//  Modifications for GPGPU support using nVidia CUDA technology are
+//  Copyright (c) 2008 Vincent Tan.
+//
 //  par2cmdline is free software; you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
 //  the Free Software Foundation; either version 2 of the License, or
@@ -108,8 +111,11 @@ template <> bool ReedSolomon<Galois8>::SetInput(u32 count)
 }
 
 template <> bool ReedSolomon<Galois8>::InternalProcess(
-  const Galois8 &factor, size_t size, const void *inputbuffer, void *outputbuffer)
+  const Galois8 &factor, size_t size, buffer& ib, u32 outputindex, void *outputbuffer
+  )
 {
+  const void *inputbuffer = ib.get();
+
 #ifdef LONGMULTIPLY
   // The 8-bit long multiplication tables
   Galois8 *table = glmt->tables;
@@ -478,8 +484,9 @@ template <> bool ReedSolomon<Galois16>::SetInput(u32 count)
 #endif
 
 template <> bool ReedSolomon<Galois16>::InternalProcess(
-  const Galois16 &factor, size_t size, const void *inputbuffer, void *outputbuffer)
+  const Galois16 &factor, size_t size, buffer& ib, u32 outputindex, void *outputbuffer)
 {
+  const void *inputbuffer = ib.get();
 #ifdef LONGMULTIPLY
   // The 8-bit long multiplication tables
   Galois16 *table = glmt->tables;
@@ -545,6 +552,16 @@ template <> bool ReedSolomon<Galois16>::InternalProcess(
       //pH[255] = temp << 16;
     }
   }
+
+  #if WANT_CONCURRENT && CONCURRENT_PIPELINE && GPGPU_CUDA
+  if (has_gpu_ && size >= sizeof(u32) && 0 == (size & (sizeof(u32)-1))) {
+    const size_t n = (size / sizeof(u32));
+    // when called from pipeline_state in par2pipeline.h, ib will always be an instance
+    // of pipeline_buffer and hence always an instance of rcbuffer:
+    if (cuda::Process(n, static_cast<rcbuffer&> (ib), lhTable, outputindex)) // EXECUTE
+      return eSuccess;
+  }
+  #endif
 
   if (DetectVectorUnit::hasVectorUnit) {
     enum { sizeof_work_unit = DetectVectorUnit::sizeof_work_unit };
@@ -670,4 +687,3 @@ template <> bool ReedSolomon<Galois16>::InternalProcess(
 
   return eSuccess;
 }
-

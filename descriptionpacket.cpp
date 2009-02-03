@@ -27,6 +27,21 @@ static char THIS_FILE[]=__FILE__;
 #endif
 #endif
 
+#ifdef WIN32
+  // Par2 spec says dir separator should be '/' not '\'
+  static
+  void
+  backslashes_to_forward_slashes(string& p) { // p is a utf8 string
+    for (size_t i = 0; i != p.length(); ++i)
+      if ('\\' == p[i])
+	    p[i] = '/';
+  }
+#else
+  inline
+  void
+  backslashes_to_forward_slashes(const string&) {} // p is a utf8 string
+#endif
+
 // Construct the packet and store the filename and size.
 
 bool DescriptionPacket::Create(string filename, u64 filesize)
@@ -48,6 +63,7 @@ bool DescriptionPacket::Create(string filename, u64 filesize)
   //packet->hash16k;      // Not known yet
   packet->length        = filesize;
 
+  backslashes_to_forward_slashes(filename); // on Windows, convert '\' to '/'
   memcpy(packet->name, filename.c_str(), filename.size());
 
   return true;

@@ -20,6 +20,12 @@
 #ifndef __REEDSOLOMON_H__
 #define __REEDSOLOMON_H__
 
+#if GPGPU_CUDA
+  #include "cuda.h"
+#endif
+
+class buffer;
+
 // The ReedSolomon object is used to calculate and store the matrix
 // used during recovery block creation or data block reconstruction.
 //
@@ -61,12 +67,17 @@ public:
   // Process a block of data
   bool Process(size_t size,             // The size of the block of data
                u32 inputindex,          // The column in the RS matrix
-               const void *inputbuffer, // Buffer containing input data
+               buffer& ib,              // Buffer containing input data
                u32 outputindex,         // The row in the RS matrix
                void *outputbuffer);     // Buffer containing output data
 
+#if GPGPU_CUDA
+  bool has_gpu(void) const { return has_gpu_; }
+  void set_has_gpu(bool b) { has_gpu_ = b; }
+#endif
+
 private:
-  bool InternalProcess(const g &factor, size_t size, const void *inputbuffer, void *outputbuffer);	// Optimization
+  bool InternalProcess(const g &factor, size_t size, buffer& ib, u32 outputindex, void *outputbuffer); // Optimization
 
 protected:
   // Perform Gaussian Elimination
@@ -105,6 +116,10 @@ protected:
 #ifdef LONGMULTIPLY
   GaloisLongMultiplyTable<g> *glmt;  // A multiplication table used by Process()
 #endif
+
+#if GPGPU_CUDA
+  bool has_gpu_;
+#endif
 };
 
 template<class g>
@@ -132,6 +147,10 @@ inline ReedSolomon<g>::ReedSolomon(void)
 #ifdef LONGMULTIPLY
   glmt = new GaloisLongMultiplyTable<g>;
 #endif
+
+#if GPGPU_CUDA
+  has_gpu_ = cuda::Begin();
+#endif
 }
 
 template<class g>
@@ -147,20 +166,24 @@ inline ReedSolomon<g>::~ReedSolomon(void)
 #ifdef LONGMULTIPLY
   delete glmt;
 #endif
+
+#if GPGPU_CUDA
+  cuda::End();
+#endif
 }
 
 template<class g>
-inline bool ReedSolomon<g>::Process(size_t size, u32 inputindex, const void *inputbuffer, u32 outputindex, void *outputbuffer)
+inline bool ReedSolomon<g>::Process(size_t size, u32 inputindex, buffer& ib, u32 outputindex, void *outputbuffer)
 {
-	// Optimization: it occurs frequently the function exits early on, so inline the start.
-	// This resulted in a speed gain of approx. 8% in repairing.
+    // Optimization: it occurs frequently the function exits early on, so inline the start.
+    // This resulted in a speed gain of approx. 8% in repairing.
 
-	// Look up the appropriate element in the RS matrix
-	g factor = leftmatrix[outputindex * (datapresent + datamissing) + inputindex];
-	// Do nothing if the factor happens to be 0
-	if (factor == 0 || 0 == size)
-		return eSuccess;
-	return this->InternalProcess (factor, size, inputbuffer, outputbuffer);
+    // Look up the appropriate element in the RS matrix
+    g factor = leftmatrix[outputindex * (datapresent + datamissing) + inputindex];
+    // Do nothing if the factor happens to be 0
+    if (factor == 0 || 0 == size)
+        return eSuccess;
+    return this->InternalProcess (factor, size, ib, outputindex, outputbuffer);
 }
 
 u32 gcd(u32 a, u32 b);

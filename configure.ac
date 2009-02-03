@@ -49,7 +49,7 @@ dnl
 AC_DEFINE([NDEBUG], [], [disable assert statements])
 
 case "$host_cpu" in
-	x86_64)
+	x86_64|amd64)
 		AC_MSG_RESULT(SSE2_on_x86_64 is enabled)
 		AM_CONDITIONAL(AMD64, true)
 		AM_CONDITIONAL(X86MMX, false)
@@ -114,21 +114,32 @@ case "$host" in
 		AM_CONDITIONAL(PLATFORM_LINUX, true)
 		AM_CONDITIONAL(PLATFORM_DARWIN, false)
 		AM_CONDITIONAL(PLATFORM_FREEBSD, false)
-		AH_TEMPLATE(PLATFORM_LINUX, [define if building for Linux])
+		AC_DEFINE(PLATFORM_LINUX, 1, [defined if building for Linux])
 		;;
 	*-*-darwin*)
 		sys_darwin=true
 		AM_CONDITIONAL(PLATFORM_LINUX, false)
 		AM_CONDITIONAL(PLATFORM_DARWIN, true)
 		AM_CONDITIONAL(PLATFORM_FREEBSD, false)
-		AH_TEMPLATE(PLATFORM_DARWIN, [define if building for Darwin / MacOS X])
+		AC_DEFINE(PLATFORM_DARWIN, 1, [defined if building for Darwin / MacOS X])
 		;;
 	*-*-freebsd*)
 		sys_freebsd=true
 		AM_CONDITIONAL(PLATFORM_LINUX, false)
 		AM_CONDITIONAL(PLATFORM_DARWIN, false)
 		AM_CONDITIONAL(PLATFORM_FREEBSD, true)
-		AH_TEMPLATE(PLATFORM_FREEBSD, [define if building for FreeBSD])
+		AC_DEFINE(PLATFORM_FREEBSD, 1, [defined if building for FreeBSD])
+		;;
+esac
+
+case "$gpgpu" in
+	cuda)
+		AM_CONDITIONAL(GPGPU_CUDA, true)
+		AC_DEFINE(GPGPU_CUDA, 1, [defined if nVidia CUDA is supported])
+		;;
+	*)
+		AM_CONDITIONAL(GPGPU_CUDA, false)
+		AH_TEMPLATE(GPGPU_CUDA, [defined if nVidia CUDA is supported])
 		;;
 esac
 

@@ -109,7 +109,8 @@ protected:
   u64                       totaldata;               // Total amount of data to be processed.
 
   size_t                    inputbuffersize;
-  u8                       *inputbuffer;             // Buffer for reading DataBlocks (chunksize)
+  buffer                    inputbuffer;
+//u8                       *inputbuffer;             // Buffer for reading DataBlocks (chunksize)
   size_t                    outputbufferalignment;
   size_t                    outputbuffersize;
   u8                       *outputbuffer;            // Buffer for writing DataBlocks (chunksize * missingblockcount)

@@ -41,7 +41,7 @@ Par1Repairer::Par1Repairer(void)
   damagedfilecount = 0;
   missingfilecount = 0;
 
-  inputbuffer = 0;
+//inputbuffer = 0;
   outputbuffer = 0;
 
   noiselevel = CommandLine::nlNormal;
@@ -1228,12 +1228,14 @@ bool Par1Repairer::AllocateBuffers(size_t memorylimit)
 
   // Allocate the two buffers
   inputbuffersize = (size_t)chunksize;
-  inputbuffer = new u8[inputbuffersize];
+  if (!inputbuffer.alloc(inputbuffersize))
+    return false;
+//inputbuffer = new u8[inputbuffersize];
   outputbufferalignment = (inputbuffersize + sizeof(u32)-1) & ~(sizeof(u32)-1);
   outputbuffersize = outputbufferalignment * verifylist.size();
   outputbuffer = new u8[outputbuffersize];
 
-  if (inputbuffer == NULL || outputbuffer == NULL)
+  if ( /* inputbuffer == NULL || */ outputbuffer == NULL)
   {
     cerr << "Could not allocate buffer memory." << endl;
     return false;
@@ -1259,7 +1261,7 @@ bool Par1Repairer::ProcessData(u64 blockoffset, size_t blocklength)
     while (inputblock != inputblocks.end())       
     {
       // Read data from the current input block
-      if (!(*inputblock)->ReadData(blockoffset, blocklength, inputbuffer))
+      if (!(*inputblock)->ReadData(blockoffset, blocklength, inputbuffer.get()))
         return false;
 
       // For each output block

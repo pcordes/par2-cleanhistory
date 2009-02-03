@@ -19,15 +19,21 @@
 //
 //  Modifications for concurrent processing, async I/O, Unicode support, and
 //  hierarchial directory support are Copyright (c) 2007-2008 Vincent Tan.
+//
+//  Modifications for GPGPU support using nVidia CUDA technology are
+//  Copyright (c) 2008 Vincent Tan.
+//
 //  Search for "#if WANT_CONCURRENT" for concurrent code.
 //  Concurrent processing utilises Intel Thread Building Blocks 2.0,
 //  Copyright (c) 2007 Intel Corp.
+//
+//  par2cmdline-0.4-tbb is available at http://chuchusoft.com/par2_tbb
 
 #include "par2cmdline.h"
 
 #if WANT_CONCURRENT
   #if CONCURRENT_PIPELINE
-    class create_buffer : public buffer {
+    class create_buffer : public pipeline_buffer {
       friend class create_pipeline_state;
       friend class create_filter_read;
       friend class create_filter_process;
@@ -58,15 +64,18 @@
       typedef std::pair<u32, idx_to_buffer_type>                                  shm_value_type;
       typedef tbb::concurrent_hash_map<Par2CreatorSourceFile*, shm_value_type, intptr_hasher<Par2CreatorSourceFile*> > shm_type;
       shm_type                                     shm_;
+
 #ifndef NDEBUG
 // only for checking that the hashing order is correct:
 typedef tbb::concurrent_hash_map< Par2CreatorSourceFile*, tbb::concurrent_vector<u32>, intptr_hasher<Par2CreatorSourceFile*> > record_type;
 record_type record_;
 #endif
+
       void try_to_update_hashes(create_buffer* ib);
 
     public:
       create_pipeline_state(
+        size_t                                     max_tokens,
         u64                                        chunksize,
         u32                                        missingblockcount,
         size_t                                     blocklength,
@@ -74,7 +83,7 @@ record_type record_;
         vector<DataBlock*>&                        inputblocks,
         vector<Par2CreatorSourceFile*>&            sourcefiles,
         bool                                       deferhashcomputation) :
-        pipeline_state<create_buffer>(chunksize, missingblockcount, blocklength, blockoffset, inputblocks),
+        pipeline_state<create_buffer>(max_tokens, chunksize, missingblockcount, blocklength, blockoffset, inputblocks),
         sourcefiles_(sourcefiles), sourcefile_(sourcefiles.begin()), sourceindex_(0),
         deferhashcomputation_(deferhashcomputation) {}
 
@@ -100,10 +109,14 @@ record_type record_;
         idx_to_buffer_type::accessor ia;
         if (shm_.insert(a, ib->sourcefile_)) {
           a->second = shm_value_type(0, idx_to_buffer_type());
+#ifndef NDEBUG
 //printf("(%s 0) inserted into shm_\n", ib->sourcefile_->get_diskfilename().c_str());
+#endif
         }
 
+#ifndef NDEBUG
 //printf("(%s %u) vs %u -> ", ib->sourcefile_->get_diskfilename().c_str(), ib->sourceindex_, a->second.first);
+#endif
         if (a->second.first == ib->sourceindex_) {
 //printf("immed\n");
           for (bool ib_needs_releasing = false; ; ) {
@@ -120,6 +133,7 @@ ra->second.push_back(ib->sourceindex_);
               release(ib);
 
             const u32 idx = ++a->second.first;
+//printf("next_idx = %u\n", idx);
             if (idx == bc) {
               // there should be no buffers waiting to be hashed:
               assert(a->second.second.size() == 0);
@@ -142,13 +156,17 @@ ra->second.push_back(ib->sourceindex_);
             }
           } // for
         } else if (a->second.first < ib->sourceindex_) { // buffer cannot be used for hash yet - defer its use until correct time
-//printf("deferred\n");
+//printf("deferred (buffer %u)\n", ib->id_);
+#ifndef NDEBUG
 //if (a->second.second.find(ia, ib->sourceindex_)) printf("(%s %u) already in deferred_list\n", ib->sourcefile_->get_diskfilename().c_str(), ib->sourceindex_);
+#endif
 //assert(!a->second.second.find(ia, ib->sourceindex_) || ia->second == ib);
           assert(!a->second.second.find(ia, ib->sourceindex_));
 
           if (a->second.second.insert(ia, ib->sourceindex_)) {
+#ifndef NDEBUG
 //printf("inserted (%s %u) into deferred_list\n", ib->sourcefile_->get_diskfilename().c_str(), ib->sourceindex_);
+#endif
             add_ref(*ib);
             ia->second = ib;
           }
@@ -225,7 +243,7 @@ Par2Creator::Par2Creator(void)
 , outputbuffer(0)
 #if WANT_CONCURRENT && CONCURRENT_PIPELINE
 #else
-, inputbuffer(0)
+//, inputbuffer(0)
 #endif
 
 , sourcefilecount(0)
@@ -258,11 +276,15 @@ Par2Creator::~Par2Creator(void)
   delete mainpacket;
   delete creatorpacket;
 
+#if WANT_CONCURRENT && CONCURRENT_PIPELINE && GPGPU_CUDA
+  cuda::DeallocateResources();
+#endif
+
 #if WANT_CONCURRENT && CONCURRENT_PIPELINE
   if (outputbuffer)
     tbb::cache_aligned_allocator<u8>().deallocate((u8*)outputbuffer, 0);
 #else
-  delete [] (u8*)inputbuffer;
+//delete [] (u8*)inputbuffer;
   delete [] (u8*)outputbuffer;
 #endif
 
@@ -1226,6 +1248,12 @@ bool Par2Creator::InitialiseOutputFiles(string par2filename)
 // Allocate memory buffers for reading and writing data to disk.
 bool Par2Creator::AllocateBuffers(void)
 {
+#if GPGPU_CUDA
+  // allocate the GPU output buffers
+  if (rs.has_gpu() && 0 == cuda::AllocateResources(recoveryblockcount, (size_t) chunksize))
+    rs.set_has_gpu(false);
+#endif
+
 #if WANT_CONCURRENT && CONCURRENT_PIPELINE
   typedef __TBB_TypeWithAlignmentAtLeastAsStrict(u8) element_type;
   const size_t aligned_chunksize = (sizeof(u8)*(size_t)chunksize+sizeof(element_type)-1)/sizeof(element_type);
@@ -1233,7 +1261,9 @@ bool Par2Creator::AllocateBuffers(void)
   size_t sz = aligned_chunksize * recoveryblockcount;
   outputbuffer = tbb::cache_aligned_allocator<u8>().allocate(sz);//new u8[sz];
 #else
-  inputbuffer = new u8[chunksize];
+  if (!inputbuffer.alloc(chunksize))
+    return false;
+//inputbuffer = new u8[chunksize];
   outputbuffer = new u8[chunksize * recoveryblockcount];
 #endif
 
@@ -1244,7 +1274,7 @@ bool Par2Creator::AllocateBuffers(void)
 #if WANT_CONCURRENT && CONCURRENT_PIPELINE
   if (outputbuffer == NULL)
 #else
-  if (inputbuffer == NULL || outputbuffer == NULL)
+  if (/* inputbuffer == NULL || */ outputbuffer == NULL)
 #endif
   {
     cerr << "Could not allocate buffer memory." << endl;
@@ -1277,8 +1307,18 @@ bool Par2Creator::ComputeRSMatrix(void)
 
 #if WANT_CONCURRENT
 
+void* Par2Creator::OutputBufferAt(u32 outputindex) {
+  #if CONCURRENT_PIPELINE
+  // Select the appropriate part of the output buffer
+  return &((u8*)outputbuffer)[aligned_chunksize_ * outputindex];
+  #else
+  // Select the appropriate part of the output buffer
+  return &((u8*)outputbuffer)[chunksize * outputindex];
+  #endif
+}
+
 bool Par2Creator::ProcessDataForOutputIndex_(u32 outputblock, u32 outputendblock, size_t blocklength,
-                                             u32 inputblock, void* inputbuffer)
+                                             u32 inputblock, buffer& inputbuffer)
 {
   #if CONCURRENT_PIPELINE
     int val = (outputbuffer_element_state_[outputblock] -= 2); // 0 -> -2, 1 -> -1
@@ -1290,10 +1330,10 @@ bool Par2Creator::ProcessDataForOutputIndex_(u32 outputblock, u32 outputendblock
     assert(val == -2 || val == -1); // ie, hold lock
 
     // Select the appropriate part of the output buffer
-    void *outbuf = &((u8*)outputbuffer)[aligned_chunksize_ * outputblock];
+    void *outbuf = OutputBufferAt(outputblock);//&((u8*)outputbuffer)[aligned_chunksize_ * outputblock];
   #else
     // Select the appropriate part of the output buffer
-    void *outbuf = &((u8*)outputbuffer)[chunksize * outputblock];
+    void *outbuf = OutputBufferAt(outputblock);//&((u8*)outputbuffer)[chunksize * outputblock];
   #endif
 
     // Process the data through the RS matrix
@@ -1318,7 +1358,11 @@ bool Par2Creator::ProcessDataForOutputIndex_(u32 outputblock, u32 outputendblock
 //        tbb::mutex::scoped_lock l(cout_mutex);
           if (0 == cout_in_use.compare_and_swap(outputendblock, 0)) { // <= this version doesn't block - only need 1 thread to write to cout
             last_cout = now;
+#ifndef NDEBUG
+            cout << "GPU=" << cuda::GetProcessingCount() << " - " << "Processing: " << newfraction/10 << '.' << newfraction%10 << "%\r" << flush;
+#else
             cout << "Processing: " << newfraction/10 << '.' << newfraction%10 << "%\r" << flush;
+#endif
             cout_in_use = 0;
           }
         }
@@ -1329,7 +1373,7 @@ bool Par2Creator::ProcessDataForOutputIndex_(u32 outputblock, u32 outputendblock
 }
 
 void Par2Creator::ProcessDataForOutputIndex(u32 outputblock, u32 outputendblock, size_t blocklength,
-                                            u32 inputblock, void* inputbuffer)
+                                            u32 inputblock, buffer& inputbuffer)
 {
   std::vector<u32> v; // which indexes need deferred processing
   v.reserve(outputendblock - outputblock);
@@ -1354,7 +1398,7 @@ void Par2Creator::ProcessDataForOutputIndex(u32 outputblock, u32 outputendblock,
 
 class ApplyPar2CreatorRSProcess {
 public:
-  ApplyPar2CreatorRSProcess(Par2Creator* obj, size_t blocklength, u32 inputblock, void* inputbuffer) :
+  ApplyPar2CreatorRSProcess(Par2Creator* obj, size_t blocklength, u32 inputblock, buffer& inputbuffer) :
     _obj(obj), _blocklength(blocklength), _inputblock(inputblock), _inputbuffer(inputbuffer) {}
   void operator()(const tbb::blocked_range<u32>& r) const {
     _obj->ProcessDataForOutputIndex(r.begin(), r.end(), _blocklength, _inputblock, _inputbuffer);
@@ -1363,17 +1407,11 @@ private:
   Par2Creator* _obj;
   size_t       _blocklength;
   u32          _inputblock;
-  void*        _inputbuffer;
+  buffer&      _inputbuffer;
 };
 
-void Par2Creator::ProcessDataConcurrently(size_t blocklength, u32 inputblock, void* inputbuffer)
+void Par2Creator::ProcessDataConcurrently(size_t blocklength, u32 inputblock, buffer& inputbuffer)
 {
-/*if (ALL_SERIAL != concurrent_processing_level) {
-    static tbb::affinity_partitioner ap;
-    tbb::parallel_for(tbb::blocked_range<u32>(0, missingblockcount),
-      ::ApplyPar2RepairerRSProcess(this, blocklength, inputindex, inputbuffer), ap);
-  } else
-    ProcessDataForOutputIndex(0, missingblockcount, blocklength, inputindex, inputbuffer);*/
   if (ALL_SERIAL != concurrent_processing_level) {
     static tbb::affinity_partitioner ap;
     tbb::parallel_for(tbb::blocked_range<u32>(0, recoveryblockcount),
@@ -1407,7 +1445,8 @@ bool Par2Creator::ProcessData(u64 blockoffset, size_t blocklength)
     for (size_t i = 0; i != sourceblockcount; ++i)
       sourceblocks_[i] = &sourceblocks[i];
 
-    create_pipeline_state s(chunksize, recoveryblockcount, blocklength, blockoffset,
+    const size_t max_tokens = ALL_SERIAL == concurrent_processing_level ? 1 : tbb::task_scheduler_init::default_num_threads();
+    create_pipeline_state s(max_tokens, chunksize, recoveryblockcount, blocklength, blockoffset,
                             sourceblocks_, sourcefiles, deferhashcomputation);
 
     tbb::pipeline p;
@@ -1418,7 +1457,46 @@ bool Par2Creator::ProcessData(u64 blockoffset, size_t blocklength)
     //create_filter_write cfw(*this, s);
     //p.add_filter(cfw);
 
-    p.run(ALL_SERIAL == concurrent_processing_level ? 1 : tbb::task_scheduler_init::default_num_threads());
+    p.run(max_tokens);
+
+  #if GPGPU_CUDA
+    if (rs.has_gpu()) {
+    #ifndef NDEBUG
+      CTimeInterval gpp("GPU postprocessing");
+    #endif
+
+      // do xor's of outputbuffers that are on the video card
+      create_buffer* buf = s.first_available_buffer();
+      if (!buf) {
+        cerr << "Failed to acquire a buffer for copying back data from video card. Creation failed." << endl;
+        return false;
+      }
+
+      const u32 n = cuda::GetDeviceOutputBufferCount();
+      for (u32 i = 0; i != n; ++i) {
+        if (!cuda::CopyDeviceOutputBuffer(i, (u32*) buf->get())) {
+          cerr << "Failed to copy back data from video card. Creation failed." << endl;
+          return false;
+        }
+        cuda::Xor((u32*) OutputBufferAt(i), (const u32*) buf->get(), (size_t) chunksize);
+      }
+      s.release(buf);
+
+    #ifndef NDEBUG
+      gpp.emit();
+    #endif
+
+      const unsigned pc = cuda::GetProcessingCount();
+      if (0 == pc)
+        cout << "The GPU was not used for processing." << endl;
+      else {
+        u64 fraction = (1000 * (u64) pc) / ((u64) sourceblockcount * (u64) recoveryblockcount);
+        cout << "The GPU was used for " << fraction/10 << '.' << fraction%10 << "% of the processing (" <<
+          pc << " out of " << ((u64) sourceblockcount * (u64) recoveryblockcount) << " processing blocks)." << endl;
+      }
+    }
+  #endif
+
     p.clear();
 
     if (!s.is_ok()) {
@@ -1464,14 +1542,14 @@ bool Par2Creator::ProcessData(u64 blockoffset, size_t blocklength)
 
     {
       // Read data from the current input block
-      if (!sourceblock->ReadData(blockoffset, blocklength, inputbuffer))
+      if (!sourceblock->ReadData(blockoffset, blocklength, inputbuffer.get()))
         return false;
 
       if (deferhashcomputation) {
         assert(blockoffset == 0 && blocklength == blocksize);
         assert(sourcefile != sourcefiles.end());
 
-        (*sourcefile)->UpdateHashes(sourceindex, inputbuffer, blocklength);
+        (*sourcefile)->UpdateHashes(sourceindex, inputbuffer.get(), blocklength);
       }
 
 //CTimeInterval  ti_pdli("ProcessDataLoopInner");

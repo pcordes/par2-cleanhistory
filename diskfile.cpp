@@ -78,7 +78,7 @@ bool DiskFile::Create(string _filename, u64 _filesize, bool async)
 #if HAVE_ASYNC_IO
                        async ? FILE_FLAG_OVERLAPPED : 0,
 #else
-					   0,
+                       0,
 #endif
                        NULL);
   if (hFile == INVALID_HANDLE_VALUE)
@@ -210,7 +210,7 @@ bool DiskFile::Open(string _filename, u64 _filesize, bool async)
 #if HAVE_ASYNC_IO
                        async ? FILE_FLAG_OVERLAPPED : 0,
 #else
-					   0,
+                       0,
 #endif
                        NULL);
   if (hFile == INVALID_HANDLE_VALUE)
@@ -305,7 +305,7 @@ string DiskFile::GetCanonicalPathname(string filename)
 
   // Resolve a relative path to a full path
   int length = ::GetFullPathName(utf8_string_to_native_char_array(filename),
-	                             sizeof(fullname)/sizeof(TCHAR), fullname, &filepart);
+                                 sizeof(fullname)/sizeof(TCHAR), fullname, &filepart);
   if (length <= 0 || (sizeof(fullname)/sizeof(TCHAR)) < length)
     return filename;
 
@@ -471,6 +471,39 @@ bool DiskFile::Create(string _filename, u64 _filesize, bool /* async */)
       cerr << "Could not set end of file: " << _filename << endl;
       return false;
     }
+
+#if HAVE_ASYNC_IO
+    // 20090202 bug fix: async writes to the newly created file can
+    // fail for the last byte because the file's state hasn't been
+    // updated. This problem definitely occurs under Mac OS X
+    // 10.4/10.5, so fix this by flushing the new file.
+    // Closing and then re-opening the new file also works.
+    if (true) {
+      if (fflush(file)) {
+        fclose(file);
+        file = 0;
+        ::remove(filename.c_str());
+      
+        cerr << "Could not flush newly created file: " << _filename << endl;
+        return false;
+      }
+    } else {
+      if (fclose(file)) {
+        file = 0;
+        ::remove(filename.c_str());
+      
+        cerr << "Could not close created file: " << _filename << endl;
+        return false;
+      }
+
+      file = fopen(_filename.c_str(), "r+b"); // do NOT truncate file
+      if (file == 0) {
+        cerr << "Could not re-open newly created file: " << _filename << endl;
+
+        return false;
+      }
+    }
+#endif
   }
 
   offset = filesize;
@@ -956,7 +989,7 @@ string DiskFile::TranslateFilename(string filename)
       CommandLine* cl = CommandLine::get();
       if (cl && !cl->GetBaseDirectory().empty())
         ch = '/'; // if '\\' was stored in the par2 file, change it to '/'
-	  else
+      else
         ok = false;
     }
 #endif

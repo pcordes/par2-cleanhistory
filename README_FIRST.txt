@@ -1,3 +1,22 @@
+=== Table of contents ===
+
+--- Introduction ---
+--- About the NVIDIA CUDA version ---
+--- Installing the pre-built Windows (32-bit) version ---
+--- Installing the pre-built Mac OS X version ---
+--- Installing the pre-built Linux version ---
+--- Installing the pre-built FreeBSD version ---
+--- Building and installing on UNIX type systems ---
+--- Building and installing on Mac OS X systems ---
+--- Building and installing on Windows operating systems ---
+--- Building and installing on FreeBSD ---
+--- Technical Details ---
+--- Version History ---
+
+=== Table of contents ===
+
+
+
 --- Introduction ---
 
 
@@ -38,6 +57,174 @@ To download the source code or some operating system builds of the
 concurrent version of par2cmdline 0.4, go to:
 
 http://www.chuchusoft.com/par2_tbb
+
+
+--- About the NVIDIA CUDA version ---
+
+
+*** The NVIDIA CUDA version should be considered experimental. ***
+
+There is no guarantee that the NVIDIA CUDA version will perform correctly. Even
+though it has been tested on test data and correctly worked on those files, it may
+not work on your files since the GPU program is new and may have unknown bugs in
+it. Caveat emptor.
+
+The NVIDIA CUDA version of the par2 program has been modified to utilise NVIDIA
+CUDA 2.0 technology, which enables it to process data using the processor (GPU) on
+certain video cards. Most of the processing is still performed by the computer's
+CPU but some will be offloaded to the video card's GPU. The amount of offloading
+depends on how much speed/power the GPU has. After processing all of the data for
+par2 creation or par2 repair, the program will display, as a percentage, how much
+of the processing was done by the GPU (or whether the GPU was not available for
+use).
+
+There are two factors which determine how much processing the GPU can provide:
+
+  (1) the amount of video card memory. Some of the memory will be used for the video
+      display, and this is partly determined by the operating system. For example, if
+      the OS/video-driver performs drawing acceleration using extra video memory, less
+      memory is available for CUDA use. For example, on a 128MB video card running
+      Mac OS X 10.5, only about 22MB was available for use by CUDA applications. If
+      the parity data totals more than 22MB, only a portion of that data can be
+      processed by the GPU. Of course this is only an example and your system will
+      probably have a different amount of memory available for CUDA use.
+      Because of OS use, it is recommended that for Mac OS X, a video card with at
+      least 256MB of video memory is recommended. For Windows XP, a video card of at
+      least 128MB is recommended, and for Windows Vista, at least 256MB is recommended.
+
+  (2) the video card's speed, which depends on both the GPU's speed and the video
+      memory's bandwidth. For the GPU, its speed depends on both its clock rate and
+      the number of stream processors it has. For example, a GeForce 8600 GT has 32
+      stream processors compared to a 9800 GTX which has 128 stream processors.
+      Memory bandwidth depends on both how wide the data path is between the GPU
+      and its memory (for example, a 64-bit wide data bus will transfer data half
+      as quickly as a 128-bit wide data bus), as well as the clock rate of the
+      video memory - the higher the clock rate, the faster the GPU can move data
+      from/to the video memory and this in turn affects how fast it processes data.
+
+Hardware requirements:
+
+  Requires a "Compute Capability 1.1" device, which is any 200 series GeForce card,
+  any 9 series GeForce card, and most 8 series GeForce card EXCEPT for the first
+  generation cards such as the 8800 Ultra, 8800 GTX, 8800 GTS, and certain Tesla
+  and Quadro cards: search the web for "Compute Capability 1.0" devices. 1.0-only
+  devices are not capable of being used. Cards such as the 8400, 8500, 8600,
+  8800 GS, 8800 GT, 8800M GTS (mobile), and 8800M GTX (mobile) are capable of
+  being used.
+
+  Mobile variants will also work, for example, 8600 refers to both the desktop and
+  mobile versions such as 8600 GT (desktop) and 8600M GT (mobile).
+
+Software requirements:
+
+  The CUDA runtime/toolkit may need to be downloaded and installed by you because NVIDIA do
+  not permit redistribution of it with third party executables. If you need to install the
+  runtime, please search for "NVIDIA CUDA toolkit" in your favourite search engine.
+
+  On Windows, it appears that the CUDA runtime/toolkit ships with recent video card driver
+  software from NVIDIA. You can verify this by checking for it at this path:
+  "C:\Windows\system32\nvcuda.dll".
+
+  On Mac OS X 10.5, check for the driver at this path: "/System/Library/Extensions/CUDA.kext",
+  and for the runtime library at this path: "/usr/local/cuda/lib/libcudart.dylib". Mac OS X
+  users will probably need to download and install the CUDA runtime/toolkit. You should be
+  aware that the default install options for the CUDA runtime/toolkit does *not* install the
+  required CUDA driver, so it needs to be installed by performing a *custom* install of the
+  runtime/toolkit: be sure to check the checkbox for "CUDA.kext".
+
+Limitations:
+
+  [1] only available as a 32-bit executable for Windows XP and later, and Intel Mac OS X
+      10.5.2 and later. Due to time constraints, other systems such as GNU/Linux are not
+      available at this time. You are most welcome to modify/build/test it for other
+      systems if you feel up to the challenge :)
+
+  [2] "low end" GPUs are "slow", ie, they do not contribute to much of the processing.
+      For example, to create 128MB (256 blocks of 524288 bytes) of parity data on a
+      128MB 8600M GT in a Core 2 Duo 2.2GHz machine, about 2% of the workload was
+      offloaded to the GPU. For the same 128MB of parity data, a 256MB 8600M GT in a
+      Core 2 Duo 2.4GHz machine offloaded about 5% of the workload to the GPU (mainly
+      because having more memory allowed more data to be processed on the video card).
+
+      It is expected that "high end" video cards will have even higher GPU offloading,
+      but without access to such a video card (yes, some of us can't splurge on that
+      top-of-the-line video card!), it's mere speculation as to what sort of performance
+      will occur. :)   Maybe someone will send an email with some answers :)
+
+  [3] sometimes the CUDA runtime reports little or no available memory on the video card
+      for use by programs, which will result in this version not being able to use the
+      GPU for processing. This problem is probably related to video display acceleration
+      by the OS, in which case, closing windows and/or applications will probably free
+      up video memory. It may, however, require a reboot to reset the video card (you
+      should do this only as a last resort).
+
+Licensing:
+
+  The source code for the CUDA-specific parts of the par2cmdline-0.4 program is provided
+  and released under the GPLv2, which is believed to be compatible with NVIDIA's licensing
+  of the sample source code/libraries in the CUDA SDK, from which the par2 processing
+  code is based on (but IANAL).
+
+Building:
+
+  If you're interested in building this version, you will need to set up the following
+  development environment(s):
+
+  Mac OS X:
+  - 10.5.2 or later
+  - Xcode 3.0 or 3.1 installed
+  - TBB 2.1 installed
+  - NVIDIA CUDA 2.0 toolkit installed, including the driver by performing a custom install.
+    The following assumes it is installed into "/usr/local/cuda".
+  - NVIDIA CUDA 2.0 SDK installed. The following assumes it is installed into "/Developer/CUDA".
+
+  Windows:
+  - XPSP2 or later
+  - Visual C++ Express 2005 installed
+  - Visual C++ Express 2008 installed
+  - TBB 2.1 installed
+  - NVIDIA CUDA 2.0 toolkit installed. The following assumes it is installed into "C:\CUDA".
+  - NVIDIA CUDA 2.0 SDK installed. The following assumes it is installed into
+    "C:\Program Files\NVIDIA Corporation\NVIDIA CUDA SDK" .
+
+  The following build instructions assume that you have already successfully built the non-CUDA
+  version of the par2 program. If you haven't done so, it is strongly recommended you do so first,
+  so that any issues relating to the non-CUDA version are fixed before you try building the CUDA
+  version (which has its own set of possible build issues).
+
+  Mac building:
+  - copy the par2_cuda folder into /Developer/CUDA/projects
+  - open a Terminal window, cd to /Developer/CUDA/projects/par2_cuda
+  - enter 'make' to build the par2_cuda static library
+  - cd to your <par2_tbb_cuda> folder. Enter 'configure gpgpu=cuda && make' to build the
+    par2 program. If it fails to compile, check your Makefile for incorrect paths, fix, try
+    building again, etc. If it fails to link, check your Makefile for incorrect paths, fix, try
+    building again, etc. When the par2 program is linked, it will assume that the
+    libcudart.dylib library is in "/usr/local/cuda/lib".
+  - copy the libtbb.dylib file into the <par2_tbb_cuda> folder (or wherever you built the par2
+    executable)
+  - run the program. If it fails to run, make sure "/usr/local/cuda/lib/libcudart.dylib" exists.
+  - if it fails to find any GPU resources for processing, check that you have installed the
+    runtime correctly including the custom installing of the CUDA driver (which should be at
+    "/System/Library/Extensions/CUDA.kext").
+
+  Windows building:
+  - copy the par2_cuda folder into "C:\Program Files\NVIDIA Corporation\NVIDIA CUDA SDK\projects"
+  - open the "C:\Program Files\NVIDIA Corporation\NVIDIA CUDA SDK\projects\par2_cuda_lib.vcproj"
+    file using Visual C++ Express 2005
+  - build the 'release' configuration (ignore the warnings about import linkage mismatches - they
+    are due to TBB's requirement of the DLL version of the CRT whereas CUDA programs are supposed
+    to link to the static version of the CRT - this causes the mismatch but won't cause crashes or
+    malfunctions).
+  - open the par2.vcproj file in the <par2_tbb_cuda> folder using Visual C++ Express 2008
+  - build the 'releaseCUDA' configuration
+  - copy the tbb.dll file into the ReleaseCUDA folder in the <par2_tbb_cuda> folder
+  - run the program. If it fails to run, make sure cudart.dll is in the %PATH% environment variable
+    (there should be an entry for "C:\cuda\bin").
+  - if it fails to find any GPU resources for processing, check that you have installed the
+    runtime correctly.
+
+*** Just to repeat, the NVIDIA CUDA version should be considered experimental. ***
 
 
 --- Installing the pre-built Windows (32-bit) version ---
@@ -369,6 +556,25 @@ enough memory to not be I/O bound when creating or repairing parity/data files.
 --- Version History ---
 
 
+The changes in the 20090203 version are:
+
+- fixed a bug which affected the Linux and Mac versions whereby repairs would fail if
+the file being repaired was short or had one or two bad blocks (because the async write
+to the file's last byte was failing).
+- on Windows, the program now stores directory paths in par2 files using '/' as the path
+separator instead of '\' (as per the Par 2.0 specification document). Note: directory
+paths are stored only when the '-d' switch is used.
+- merged the sources from the CPU-only and CPU/GPU versions so that both versions now
+build from the same set of source files using different 'configure' options (Mac, Linux,
+FreeBSD) or project files (Windows). See above for building instructions.
+
+The changes in the 20081009 version are:
+
+- added support for NVIDIA CUDA 2.0 technology, which allows the GPU on the video card to
+  be used to perform some of the processing workload in addition to the CPU on the mainboard.
+  See the "--- About the NVIDIA CUDA version ---" section in this file for limitations,
+  requirements, build instructions, licensing, and more information.
+
 The changes in the 20081005 version are:
 
 - asynchronous reading of a large number of small files would sometimes not complete which
@@ -683,7 +889,7 @@ The changes in the 20070831 version are:
 
 
 Vincent Tan.
-October 09, 2008.
+February 03, 2009.
 
 //
 //  Modifications for concurrent processing, Unicode support, and hierarchial

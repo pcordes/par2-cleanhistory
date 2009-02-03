@@ -19,9 +19,15 @@
 //
 //  Modifications for concurrent processing, async I/O, Unicode support, and
 //  hierarchial directory support are Copyright (c) 2007-2008 Vincent Tan.
+//
+//  Modifications for GPGPU support using nVidia CUDA technology are
+//  Copyright (c) 2008 Vincent Tan.
+//
 //  Search for "#if WANT_CONCURRENT" for concurrent code.
 //  Concurrent processing utilises Intel Thread Building Blocks 2.0,
 //  Copyright (c) 2007 Intel Corp.
+//
+//  par2cmdline-0.4-tbb is available at http://chuchusoft.com/par2_tbb
 
 #ifndef __PAR2CREATOR_H__
 #define __PAR2CREATOR_H__
@@ -44,13 +50,14 @@ protected:
 
 #if WANT_CONCURRENT
 public:
-  void ProcessDataForOutputIndex(u32 outputstartindex, u32 outputendindex, size_t blocklength, u32 inputblock, void* inputbuffer);
-  void ProcessDataConcurrently(size_t blocklength, u32 inputblock, void* inputbuffer);
+  void ProcessDataForOutputIndex(u32 outputstartindex, u32 outputendindex, size_t blocklength, u32 inputblock, buffer& ib);
+  void ProcessDataConcurrently(size_t blocklength, u32 inputblock, buffer& ib);
   #if WANT_CONCURRENT_PAR2_FILE_OPENING
   Par2CreatorSourceFile* OpenSourceFile(const CommandLine::ExtraFile &extrafile);
   #endif
 protected:
-  bool ProcessDataForOutputIndex_(u32 outputblock, u32 outputendblock, size_t blocklength, u32 inputblock, void* inputbuffer);
+  void* OutputBufferAt(u32 outputindex);
+  bool ProcessDataForOutputIndex_(u32 outputblock, u32 outputendblock, size_t blocklength, u32 inputblock, buffer& ib);
 #endif
 
   // Compute block size from block count or vice versa depending on which was
@@ -151,12 +158,13 @@ protected:
 
 #if WANT_CONCURRENT
   #if CONCURRENT_PIPELINE
-  // bit 0: which half of each entry in outputbuffer contains valid data (if DSTOUT is 1)
-  // bit 7: whether entry in outputbuffer is in use (0 = available, 1 = in-use)
+  // low bit: which half of each entry in outputbuffer contains valid data (if DSTOUT is 1)
+  // high bit: whether entry in outputbuffer is in use (0 = available, 1 = in-use)
   std::vector< tbb::atomic<int> > outputbuffer_element_state_; // state of each entry of outputbuffer
   size_t                   aligned_chunksize_;
   #else
-  void                     *inputbuffer;             // Buffer for reading DataBlocks (chunksize)
+  buffer                    inputbuffer;
+//void                     *inputbuffer;             // Buffer for reading DataBlocks (chunksize)
   #endif
 
   // 32-bit PowerPC does not support tbb::atomic<u64> because it requires the ldarx
@@ -168,7 +176,8 @@ protected:
   tbb::atomic<u64>          progress;                // How much data has been processed.
   #endif
 #else
-  void                     *inputbuffer;             // Buffer for reading DataBlocks (chunksize)
+  buffer                    inputbuffer;
+//void                     *inputbuffer;             // Buffer for reading DataBlocks (chunksize)
   #if DSTOUT
   std::vector<int>          outputbuffer_element_state_; // state of each entry of outputbuffer
   #endif

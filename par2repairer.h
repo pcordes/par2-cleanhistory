@@ -19,9 +19,15 @@
 //
 //  Modifications for concurrent processing, async I/O, Unicode support, and
 //  hierarchial directory support are Copyright (c) 2007-2008 Vincent Tan.
+//
+//  Modifications for GPGPU support using nVidia CUDA technology are
+//  Copyright (c) 2008 Vincent Tan.
+//
 //  Search for "#if WANT_CONCURRENT" for concurrent code.
 //  Concurrent processing utilises Intel Thread Building Blocks 2.0,
 //  Copyright (c) 2007 Intel Corp.
+//
+//  par2cmdline-0.4-tbb is available at http://chuchusoft.com/par2_tbb
 
 #ifndef __PAR2REPAIRER_H__
 #define __PAR2REPAIRER_H__
@@ -111,14 +117,17 @@ public:
   #if WANT_CONCURRENT_SOURCE_VERIFICATION
   void VerifyOneSourceFile(Par2RepairerSourceFile *sourcefile, bool& finalresult);
   #endif
-  void ProcessDataForOutputIndex(u32 outputstartindex, u32 outputendindex, size_t blocklength, u32 inputindex, void* inputbuffer);
-  void ProcessDataConcurrently(size_t blocklength, u32 inputindex, void* inputbuffer);
+  void ProcessDataForOutputIndex(u32 outputstartindex, u32 outputendindex, size_t blocklength,
+                                 u32 inputindex, buffer& inputbuffer);
+  void ProcessDataConcurrently(size_t blocklength, u32 inputindex, buffer& inputbuffer);
 #endif
   // Load packets from the specified file
   bool LoadPacketsFromFile(string filename);
 #if WANT_CONCURRENT
 protected:
-  bool ProcessDataForOutputIndex_(u32 outputindex, u32 outputendindex, size_t blocklength, u32 inputindex, void* inputbuffer);
+  void* OutputBufferAt(u32 outputindex);
+  bool ProcessDataForOutputIndex_(u32 outputindex, u32 outputendindex, size_t blocklength,
+                                  u32 inputindex, buffer& inputbuffer);
 #endif
   // Finish loading a recovery packet
   bool LoadRecoveryPacket(DiskFile *diskfile, u64 offset, PACKET_HEADER &header);
@@ -264,12 +273,13 @@ protected:
 
 #if WANT_CONCURRENT
   #if CONCURRENT_PIPELINE
-  // bit 0: which half of each entry in outputbuffer contains valid data (if DSTOUT is 1)
-  // bit 7: whether entry in outputbuffer is in use (0 = available, 1 = in-use)
+  // low bit: which half of each entry in outputbuffer contains valid data (if DSTOUT is 1)
+  // high bit: whether entry in outputbuffer is in use (0 = available, 1 = in-use)
   std::vector< tbb::atomic<int> > outputbuffer_element_state_; // state of each entry of outputbuffer
   size_t                   aligned_chunksize_;
   #else
-  void                     *inputbuffer;             // Buffer for reading DataBlocks (chunksize)
+  buffer                    inputbuffer;
+//void                     *inputbuffer;             // Buffer for reading DataBlocks (chunksize)
   #endif
 
   // 32-bit PowerPC does not support tbb::atomic<u64> because it requires the ldarx
@@ -281,7 +291,8 @@ protected:
   tbb::atomic<u64>          progress;                // How much data has been processed.
   #endif
 #else
-  void                     *inputbuffer;             // Buffer for reading DataBlocks (chunksize)
+  buffer                    inputbuffer;
+//void                     *inputbuffer;             // Buffer for reading DataBlocks (chunksize)
   #if DSTOUT
   std::vector<int>          outputbuffer_element_state_; // state of each entry of outputbuffer
   #endif

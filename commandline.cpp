@@ -117,7 +117,7 @@ static char THIS_FILE[]=__FILE__;
   UTF16_to_console_code_page(const wstring& utf16)
   {
     int    i, j;
-	UINT   cp = ::GetConsoleOutputCP();
+    UINT   cp = ::GetConsoleOutputCP();
 
     {
       i = ::WideCharToMultiByte(cp,      //    code page
@@ -212,6 +212,7 @@ static char THIS_FILE[]=__FILE__;
   }
 
 #else
+
   enum { OS_SEPARATOR = '/', OTHER_OS_SEPARATOR = '\\' };
   #include <dirent.h>
 
@@ -316,10 +317,6 @@ static
 list<string>*
 build_file_list_in(const char* dir)
 {
-  std::auto_ptr< list<string> > res(new list<string>);
-  if (!res.get())
-    return NULL;
-
   string s(dir);
   if (s.empty())
     return NULL;
@@ -328,6 +325,11 @@ build_file_list_in(const char* dir)
   char c = s[i];
   if (OTHER_OS_SEPARATOR == c || OS_SEPARATOR == c)
     s.erase(i);
+
+  std::auto_ptr< list<string> > res(new list<string>);
+  if (!res.get())
+    return NULL;
+
   build_file_list_in_imp(s, res.get());
   return res.release();
 }
@@ -1064,7 +1066,7 @@ bool CommandLine::Parse(int argc, TCHAR *argv[])
                 cout << "Skipping 0 byte file: " << filename << endl;
               else if (accepted_filenames.end() != accepted_filenames.find(filename))
                 cout << "Skipping duplicate filename: " << filename << endl;
-              else if (accepted_filenames.end() == accepted_filenames.find(filename)) {
+              else /* if (accepted_filenames.end() == accepted_filenames.find(filename)) */ {
                 accepted_filenames.insert(filename);
                 extrafiles.push_back(ExtraFile(filename, filesize));
 
@@ -1073,8 +1075,8 @@ bool CommandLine::Parse(int argc, TCHAR *argv[])
                 totalsourcesize += filesize;
                 if (largestsourcesize < filesize)
                   largestsourcesize = filesize;
-              }
-            }
+              } // if
+            } // if
           } // if
         } // for
         delete filenames;

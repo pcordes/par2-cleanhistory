@@ -18,7 +18,7 @@
 //  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 //
 //  Modifications for concurrent processing, Unicode support, and hierarchial
-//  directory support are Copyright (c) 2007-2008 Vincent Tan.
+//  directory support are Copyright (c) 2007-2009 Vincent Tan.
 //  Search for "#if WANT_CONCURRENT" for concurrent code.
 //  Concurrent processing utilises Intel Thread Building Blocks 2.0,
 //  Copyright (c) 2007 Intel Corp.
@@ -40,7 +40,7 @@ void banner(void)
   cout << version << ", Copyright (C) 2003 Peter Brian Clements." << endl
 #if WANT_CONCURRENT
        << "Modifications for concurrent processing, Unicode support, and hierarchial" << endl
-       << "directory support are Copyright (c) 2007-2008 Vincent Tan." << endl
+       << "directory support are Copyright (c) 2007-2009 Vincent Tan." << endl
        << "Concurrent processing utilises Intel Thread Building Blocks 2.0," << endl
        << "Copyright (c) 2007-2008 Intel Corp." << endl
   #if __x86_64__ || defined(WIN64)

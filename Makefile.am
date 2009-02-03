@@ -44,27 +44,46 @@ endif
 if PLATFORM_DARWIN
 PLATFORM = darwin
 FLAGS_ARCH = -arch $(ARCH)
-ASMOBJECTS_PLATFORM = 
+ASMSOURCES_PLATFORM = 
 CXXFLAGS_DARWIN =                                 #  because the functions in the .s files process RS data
 #CXXFLAGS_DARWIN = -fomit-frame-pointer           <= if you want GCC to produce slightly better scalar x86 code
 #CXXFLAGS_DARWIN = -mmmx -fomit-frame-pointer     <= if you want GCC to produce SIMD code using instrinsic fns
 else
 PLATFORM = posix
 FLAGS_ARCH =
-ASMOBJECTS_PLATFORM = detect-mmx.s
+ASMSOURCES_PLATFORM = detect-mmx.s
 endif
 
 if AMD64
-ASMOBJECTS = reedsolomon-$(ARCH)-scalar-$(PLATFORM).s reedsolomon-$(ARCH_MMX)-mmx-$(PLATFORM).s
+ASMSOURCES = reedsolomon-$(ARCH)-scalar-$(PLATFORM).s reedsolomon-$(ARCH_MMX)-mmx-$(PLATFORM).s
 endif
 if X86CPU
-ASMOBJECTS = reedsolomon-$(ARCH)-scalar-$(PLATFORM).s reedsolomon-$(ARCH_MMX)-mmx-$(PLATFORM).s $(ASMOBJECTS_PLATFORM)
+ASMSOURCES = reedsolomon-$(ARCH)-scalar-$(PLATFORM).s reedsolomon-$(ARCH_MMX)-mmx-$(PLATFORM).s $(ASMSOURCES_PLATFORM)
+endif
+
+if GPGPU_CUDA
+AM_CXXFLAGS_GPGPU = # -I/usr/local/cuda/include
+AM_LDFLAGS_GPGPU = -L/usr/local/cuda/lib -lcudart
+if PLATFORM_DARWIN
+if X86CPU
+#par2_DEPENDENCIES = /Developer/CUDA/lib/libpar2_cuda.dylib
+AM_LDFLAGS_GPGPU += -Wl,-rpath -Wl,/usr/local/cuda/lib -L/Developer/CUDA/lib -lpar2_cuda
+GPGPU_SOURCES = cuda.cpp cuda.h
+else
+# ERROR: Darwin builds of par2 only supports CUDA on the i686 architecture (because CUDA ships as a 32-bit dylib that requires 10.5.2)
+endif
+endif
+else
+AM_CXXFLAGS_GPGPU =
+AM_LDFLAGS_GPGPU =
+GPGPU_SOURCES = 
 endif
 
 .s.o:
 	$(CCASCOMPILE) $(FLAGS_ARCH) -c -o $@ $<
 
 par2_SOURCES = par2cmdline.cpp par2cmdline.h \
+	buffer.cpp buffer.h \
 	commandline.cpp commandline.h \
 	crc.cpp crc.h \
 	creatorpacket.cpp creatorpacket.h \
@@ -83,34 +102,41 @@ par2_SOURCES = par2cmdline.cpp par2cmdline.h \
 	par2creator.cpp par2creator.h \
 	par2creatorsourcefile.cpp par2creatorsourcefile.h \
 	par2fileformat.cpp par2fileformat.h \
-	par2pipeline.cpp par2pipeline.h \
 	par2repairer.cpp par2repairer.h \
 	par2repairersourcefile.cpp par2repairersourcefile.h \
+	pipeline.cpp pipeline.h \
 	recoverypacket.cpp recoverypacket.h \
 	reedsolomon.cpp reedsolomon.h \
 	verificationhashtable.cpp verificationhashtable.h \
 	verificationpacket.cpp verificationpacket.h \
-	$(ASMOBJECTS)
+	$(ASMSOURCES) $(GPGPU_SOURCES)
 
 LDADD = -lstdc++ -ltbb -L.
 if PLATFORM_DARWIN
-AM_CXXFLAGS = -Wall -I$(top_srcdir)/../tbb21_009oss/include -gfull -O3 -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS_DARWIN) $(FLAGS_ARCH)
+AM_CXXFLAGS = -Wall -I$(top_srcdir)/../tbb21_009oss/include -gfull -O3 -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS_DARWIN) $(AM_CXXFLAGS_GPGPU) $(FLAGS_ARCH)
 if X86CPU
+if GPGPU_CUDA    # CUDA mandates 10.5 so the two are mutally exclusive: either CUDA or 10.4u support but not both
+AM_LDFLAGS = $(AM_LDFLAGS_GPGPU)
+else
 AM_CXXFLAGS += -isysroot /Developer/SDKs/MacOSX10.4u.sdk
 AM_LDFLAGS = -mmacosx-version-min=10.4
+endif
 endif
 if PPC32
 AM_CXXFLAGS += -isysroot /Developer/SDKs/MacOSX10.4u.sdk
 AM_LDFLAGS = -mmacosx-version-min=10.4
 endif
 endif
+
 if PLATFORM_FREEBSD
-AM_LDFLAGS = -L/usr/local/lib
-AM_CXXFLAGS = -Wall -I/usr/local/include $(FLAGS_ARCH)
+AM_CXXFLAGS = -Wall -I/usr/local/include $(AM_CXXFLAGS_GPGPU) $(FLAGS_ARCH)
+AM_CCASFLAGS = -Wa,-I$(top_srcdir)
+AM_LDFLAGS = -L/usr/local/lib $(AM_LDFLAGS_GPGPU)
 endif
 if PLATFORM_LINUX
-AM_LDFLAGS = '-Wl,-R,$$ORIGIN'
-AM_CXXFLAGS = -Wall -I$(top_srcdir)/../tbb21_009oss/include $(FLAGS_ARCH)
+AM_CXXFLAGS = -Wall -I$(top_srcdir)/../tbb21_009oss/include $(AM_CXXFLAGS_GPGPU) $(FLAGS_ARCH)
+AM_CCASFLAGS = -Wa,-I$(top_srcdir)
+AM_LDFLAGS = '-Wl,-R,$$ORIGIN' $(AM_LDFLAGS_GPGPU)
 endif
 
 EXTRA_DIST = PORTING ROADMAP par2cmdline.sln par2cmdline.vcproj \

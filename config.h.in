@@ -1,5 +1,8 @@
 /* config.h.in.  Generated from configure.ac by autoheader.  */
 
+/* defined if nVidia CUDA is supported */
+#undef GPGPU_CUDA
+
 /* Define to 1 if you have the <aio.h> header file. */
 #undef HAVE_AIO_H
 
@@ -108,13 +111,13 @@
 /* Define to the version of this package. */
 #undef PACKAGE_VERSION
 
-/* define if building for Darwin / MacOS X */
+/* defined if building for Darwin / MacOS X */
 #undef PLATFORM_DARWIN
 
-/* define if building for FreeBSD */
+/* defined if building for FreeBSD */
 #undef PLATFORM_FREEBSD
 
-/* define if building for Linux */
+/* defined if building for Linux */
 #undef PLATFORM_LINUX
 
 /* Define to 1 if you have the ANSI C header files. */

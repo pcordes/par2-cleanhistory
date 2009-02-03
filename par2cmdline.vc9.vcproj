@@ -174,6 +174,164 @@
 				Name="VCPostBuildEventTool"
 			/>
 		</Configuration>
+		<Configuration
+			Name="DebugCUDA|Win32"
+			OutputDirectory="$(SolutionDir)$(ConfigurationName)"
+			IntermediateDirectory="$(ConfigurationName)"
+			ConfigurationType="1"
+			InheritedPropertySheets="$(VCInstallDir)VCProjectDefaults\UpgradeFromVC71.vsprops"
+			CharacterSet="1"
+			>
+			<Tool
+				Name="VCPreBuildEventTool"
+			/>
+			<Tool
+				Name="VCCustomBuildTool"
+			/>
+			<Tool
+				Name="VCXMLDataGeneratorTool"
+			/>
+			<Tool
+				Name="VCWebServiceProxyGeneratorTool"
+			/>
+			<Tool
+				Name="VCMIDLTool"
+			/>
+			<Tool
+				Name="VCCLCompilerTool"
+				Optimization="0"
+				AdditionalIncludeDirectories="..\tbb21_009oss\include"
+				PreprocessorDefinitions="WIN32;_DEBUG;_CONSOLE;PACKAGE=\&quot;par2cmdline\&quot;;VERSION=\&quot;0.4\&quot;;GPGPU_CUDA=1"
+				MinimalRebuild="true"
+				BasicRuntimeChecks="3"
+				RuntimeLibrary="3"
+				UsePrecompiledHeader="0"
+				PrecompiledHeaderThrough="par2cmdline.h"
+				WarningLevel="3"
+				DebugInformationFormat="4"
+			/>
+			<Tool
+				Name="VCManagedResourceCompilerTool"
+			/>
+			<Tool
+				Name="VCResourceCompilerTool"
+			/>
+			<Tool
+				Name="VCPreLinkEventTool"
+			/>
+			<Tool
+				Name="VCLinkerTool"
+				AdditionalDependencies="..\tbb21_009oss\ia32\vc7.1\lib\tbb_debug.lib $(InputDir)\CxxFrameHandler3_to_CxxFrameHandler.obj &quot;C:\Program Files\NVIDIA Corporation\NVIDIA CUDA SDK\projects\par2_cuda\DebugLib\par2_cuda.lib&quot; &quot;C:\CUDA\lib\cudart.lib&quot; $(NOINHERIT)"
+				OutputFile="$(OutDir)/par2.exe"
+				LinkIncremental="2"
+				GenerateDebugInformation="true"
+				SubSystem="1"
+				RandomizedBaseAddress="1"
+				DataExecutionPrevention="0"
+				TargetMachine="1"
+			/>
+			<Tool
+				Name="VCALinkTool"
+			/>
+			<Tool
+				Name="VCManifestTool"
+			/>
+			<Tool
+				Name="VCXDCMakeTool"
+			/>
+			<Tool
+				Name="VCBscMakeTool"
+			/>
+			<Tool
+				Name="VCFxCopTool"
+			/>
+			<Tool
+				Name="VCAppVerifierTool"
+			/>
+			<Tool
+				Name="VCPostBuildEventTool"
+			/>
+		</Configuration>
+		<Configuration
+			Name="ReleaseCUDA|Win32"
+			OutputDirectory="$(ConfigurationName)"
+			IntermediateDirectory="$(ConfigurationName)"
+			ConfigurationType="1"
+			InheritedPropertySheets="$(VCInstallDir)VCProjectDefaults\UpgradeFromVC71.vsprops"
+			CharacterSet="1"
+			WholeProgramOptimization="1"
+			>
+			<Tool
+				Name="VCPreBuildEventTool"
+			/>
+			<Tool
+				Name="VCCustomBuildTool"
+			/>
+			<Tool
+				Name="VCXMLDataGeneratorTool"
+			/>
+			<Tool
+				Name="VCWebServiceProxyGeneratorTool"
+			/>
+			<Tool
+				Name="VCMIDLTool"
+			/>
+			<Tool
+				Name="VCCLCompilerTool"
+				AdditionalOptions="/MP"
+				Optimization="3"
+				AdditionalIncludeDirectories="..\tbb21_009oss\include"
+				PreprocessorDefinitions="WIN32;NDEBUG;_CONSOLE;PACKAGE=\&quot;par2cmdline\&quot;;VERSION=\&quot;0.4\&quot;;GPGPU_CUDA=1"
+				StringPooling="true"
+				RuntimeLibrary="2"
+				BufferSecurityCheck="false"
+				RuntimeTypeInfo="false"
+				UsePrecompiledHeader="0"
+				PrecompiledHeaderThrough="par2cmdline.h"
+				WarningLevel="3"
+				DebugInformationFormat="3"
+			/>
+			<Tool
+				Name="VCManagedResourceCompilerTool"
+			/>
+			<Tool
+				Name="VCResourceCompilerTool"
+			/>
+			<Tool
+				Name="VCPreLinkEventTool"
+			/>
+			<Tool
+				Name="VCLinkerTool"
+				AdditionalDependencies="..\tbb21_009oss\ia32\vc7.1\lib\tbb.lib $(InputDir)\CxxFrameHandler3_to_CxxFrameHandler.obj &quot;C:\Program Files\NVIDIA Corporation\NVIDIA CUDA SDK\projects\par2_cuda\ReleaseLib\par2_cuda.lib&quot; &quot;C:\CUDA\lib\cudart.lib&quot; $(NOINHERIT)"
+				OutputFile="$(OutDir)/par2.exe"
+				GenerateDebugInformation="true"
+				SubSystem="1"
+				OptimizeReferences="2"
+				EnableCOMDATFolding="2"
+				TargetMachine="1"
+			/>
+			<Tool
+				Name="VCALinkTool"
+			/>
+			<Tool
+				Name="VCManifestTool"
+			/>
+			<Tool
+				Name="VCXDCMakeTool"
+			/>
+			<Tool
+				Name="VCBscMakeTool"
+			/>
+			<Tool
+				Name="VCFxCopTool"
+			/>
+			<Tool
+				Name="VCAppVerifierTool"
+			/>
+			<Tool
+				Name="VCPostBuildEventTool"
+			/>
+		</Configuration>
 	</Configurations>
 	<References>
 	</References>
@@ -182,6 +340,10 @@
 			Name="Source Files"
 			Filter="cpp;c;cxx;def;odl;idl;hpj;bat;asm"
 			>
+			<File
+				RelativePath=".\buffer.cpp"
+				>
+			</File>
 			<File
 				RelativePath="commandline.cpp"
 				>
@@ -196,6 +358,10 @@
 			</File>
 			<File
 				RelativePath="criticalpacket.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\cuda.cpp"
 				>
 			</File>
 			<File
@@ -263,6 +429,10 @@
 				>
 			</File>
 			<File
+				RelativePath=".\pipeline.cpp"
+				>
+			</File>
+			<File
 				RelativePath="recoverypacket.cpp"
 				>
 			</File>
@@ -284,6 +454,10 @@
 			Filter="h;hpp;hxx;hm;inl;inc"
 			>
 			<File
+				RelativePath=".\buffer.h"
+				>
+			</File>
+			<File
 				RelativePath="commandline.h"
 				>
 			</File>
@@ -297,6 +471,10 @@
 			</File>
 			<File
 				RelativePath="criticalpacket.h"
+				>
+			</File>
+			<File
+				RelativePath=".\cuda.h"
 				>
 			</File>
 			<File
@@ -365,6 +543,10 @@
 			</File>
 			<File
 				RelativePath="par2repairersourcefile.h"
+				>
+			</File>
+			<File
+				RelativePath=".\pipeline.h"
 				>
 			</File>
 			<File
@@ -439,6 +621,10 @@
 		</File>
 		<File
 			RelativePath="Makefile"
+			>
+		</File>
+		<File
+			RelativePath="..\par2_win64\Makefile"
 			>
 		</File>
 		<File

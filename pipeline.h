@@ -1,7 +1,7 @@
 //  This file is part of par2cmdline (a PAR 2.0 compatible file verification and
 //  repair tool). See http://parchive.sourceforge.net for details of PAR 2.0.
 //
-//  Copyright (c) 2008 Vincent Tan, created 2008-09-17. par2pipeline.h
+//  Copyright (c) 2008 Vincent Tan, created 2008-09-17. pipeline.h
 //
 //  par2cmdline is free software; you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
@@ -25,63 +25,40 @@
 
 #include "par2cmdline.h"
 
+#undef DEBUG_BUFFERS
+#undef DEBUG_ASYNC_WRITE // #define
+
 // implements async I/O using a TBB pipeline
 
-#if WANT_CONCURRENT
-  #if CONCURRENT_PIPELINE
+#include "buffer.h"
 
-    #include "tbb/tbb_thread.h"
-    #include "tbb/tick_count.h"
+#if WANT_CONCURRENT && CONCURRENT_PIPELINE
 
-  class buffer {
+  #include "tbb/tbb_thread.h"
+  #include "tbb/tick_count.h"
+
+  class pipeline_buffer : public rcbuffer {
   public:
     enum WRITE_STATUS { NONE, ASYNC_WRITE };
+#ifdef DEBUG_ASYNC_WRITE
+    vector<DataBlock*>::iterator inputblock_;
+#endif
   private:
     aiocb_type aiocb_;
-    u8* inputbuffer_;
-
-    tbb::atomic<int> refcount_;
     u32 inputindex_;
     WRITE_STATUS write_status_;
 
-    friend class pipeline_state_base;
-    bool try_to_acquire(void) {
-      if (1 == ++refcount_)
-        return true;
-
-      --refcount_;
-      return false;
-    }
-    void add_ref(void) { ++refcount_; }
-    int release(void) { assert(refcount_ > 0); return --refcount_; }
-
   public:
-    buffer(void) : inputbuffer_(NULL), inputindex_(0), write_status_(NONE) {
-      refcount_ = 0;
-    }
+    pipeline_buffer(void) : inputindex_(0), write_status_(NONE) {}
 
-    ~buffer(void) {
-      if (inputbuffer_)
-        tbb::cache_aligned_allocator<u8>().deallocate(inputbuffer_, 0);
-    }
-
-    bool alloc(size_t sz) {
-      assert(NULL == inputbuffer_);
-      inputbuffer_ = tbb::cache_aligned_allocator<u8>().allocate(sz);//new u8[sz];
-      return NULL != inputbuffer_;
-    }
-
-    const u8* get(void) const { return inputbuffer_; }
-    u8* get(void) { return inputbuffer_; }
+    aiocb_type& get_aiocb(void) { return aiocb_; }
 
     u32 get_inputindex(void) const { return inputindex_; }
     void set_inputindex(u32 ii) { inputindex_ = ii; }
 
-    aiocb_type& get_aiocb(void) { return aiocb_; }
-
     void set_write_status(WRITE_STATUS ws) { write_status_ = ws; }
     WRITE_STATUS get_write_status(void) const { return write_status_; }
-  }; // buffer
+  };
 
   class pipeline_state_base {
   public:
@@ -113,9 +90,9 @@
     bool                                         ok_; // if an error or failure occurs then this becomes false
 
   protected:
-    static bool try_to_acquire(buffer& b) { return b.try_to_acquire(); }
-    static void add_ref(buffer& b) { return b.add_ref(); }
-    static int release(buffer& b) { return b.release(); }
+    static bool try_to_acquire(rcbuffer& b) { return b.try_to_acquire(); }
+    static void add_ref(rcbuffer& b) { return b.add_ref(); }
+    static int release(rcbuffer& b) { return b.release(); }
 
   public:
     pipeline_state_base(
@@ -169,6 +146,7 @@
 
   public:
     pipeline_state(
+      size_t                                     max_tokens,
       u64                                        chunksize,
       u32                                        missingblockcount,
       size_t                                     blocklength,
@@ -176,37 +154,55 @@
       vector<DataBlock*>&                        inputblocks) :
       pipeline_state_base(chunksize, missingblockcount, blocklength, blockoffset, inputblocks),
       inputbuffersidx_(0) {
-      const size_t n_buffer = tbb::task_scheduler_init::default_num_threads() + 1;
-      inputbuffers_.resize(n_buffer);
-      for (size_t i = 0; i != n_buffer; ++i)
+      inputbuffers_.resize(max_tokens);
+      for (size_t i = 0; i != max_tokens; ++i) {
         if (!inputbuffers_[i].alloc((size_t)chunksize))
           throw 1;
+
+  #if !defined(NDEBUG) && defined(DEBUG_BUFFERS)
+        inputbuffers_[i].id_ = i;
+  #endif
+      }
     }
 
     BUFFER* first_available_buffer(void) {
       for (;;) {
         size_t off = inputbuffersidx_;
-        size_t n_buffer = inputbuffers_.size();
-        for (size_t i = 0; i != n_buffer; ++i) {
+  #if !defined(NDEBUG) && defined(DEBUG_BUFFERS)
+        size_t off__ = off;
+  #endif
+        size_t max_tokens = inputbuffers_.size();
+        for (size_t i = 0; i != max_tokens; ++i) {
           if (try_to_acquire(inputbuffers_[off])) {
-//printf("first_available_buffer() -> %p=inputbuffer->acquired()\n", &inputbuffers_[off]);
+  #if !defined(NDEBUG) && defined(DEBUG_BUFFERS)
+printf("%u acquired\n", (unsigned) off);
+  #endif
             return &inputbuffers_[off];
           }
 
-          if (n_buffer == ++off) off = 0;
+          if (max_tokens == ++off) off = 0;
         }
 
-//printf("the pause that refreshes...\n");
-        tbb::this_tbb_thread::sleep( tbb::tick_count::interval_t(0.001) ); // pause for 1ms
+  #if !defined(NDEBUG) && defined(DEBUG_BUFFERS)
+printf("pausing: off__=%u off=%u max_tokens=%u...\r", (unsigned) off__, (unsigned) off, (unsigned) max_tokens);
+  #endif
+        tbb::this_tbb_thread::sleep( tbb::tick_count::interval_t(0.001 /*0.001 = 1ms*/) ); // pause for 1ms
       }
       //assert(false);
       //return NULL;
     }
 
     void release(BUFFER* b) {
-//printf("release() -> %p=inputbuffer->release()\n", b);
-      if (0 == pipeline_state_base::release(*b))
+      int rc = pipeline_state_base::release(*b);
+  #if !defined(NDEBUG) && defined(DEBUG_BUFFERS)
+printf("%u released -> rc=%d\n", b - &inputbuffers_[0], rc);
+  #endif
+      if (0 == rc) {
         inputbuffersidx_ = b - &inputbuffers_[0];
+  #if !defined(NDEBUG) && defined(DEBUG_BUFFERS)
+printf("inputbuffersidx_ := %u\n", b - &inputbuffers_[0]);
+  #endif
+      }
     }
   };
 
@@ -281,6 +277,10 @@
           // other threads trying to access 'df' will now block in the find() call above.
           if (!df->Open(false/*true*/)) { // open file for sync I/O
 //printf("opening DiskFile %s failed\n", df->FileName().c_str());
+  #ifndef NDEBUG
+{int err = errno; fprintf(stderr, "error %d: %s, # of open files = %u\n", err, strerror(err), (unsigned) state_.open_diskfile_count()); fflush(stderr);}
+  #endif
+            cerr << "unable to open " << df->FileName() << endl;
             state_.set_not_ok();
             return NULL;
           }
@@ -300,6 +300,9 @@
     {
       // Read data from the current input block
   #if 1
+#ifdef DEBUG_ASYNC_WRITE
+printf("reading off=%llu len=%lu\n", (*inputblock)->GetOffset() + state_.blockoffset(), state_.blocklength());
+#endif
       if (!(*inputblock)->ReadData(state_.blockoffset(), state_.blocklength(), inputbuffer->get()) ||
           !static_cast<SUBCLASS*> (this)->on_inputbuffer_read(inputbuffer)) {
         state_.set_not_ok();
@@ -313,6 +316,10 @@
       if (!(*inputblock)->ReadDataAsync(inputbuffer->get_aiocb(), state_.blockoffset(),
                                         state_.blocklength(), inputbuffer->get())) {
 //printf("start reading DiskFile %s failed\n", (*inputblock)->GetDiskFile()->FileName().c_str());
+    #ifndef NDEBUG
+{int err = errno; fprintf(stderr, "\nerror %d: %s, # of open files = %u\n", err, strerror(err), (unsigned) state_.open_diskfile_count()); fflush(stderr);}
+    #endif
+        cerr << "unable to request async read of " << (*inputblock)->GetDiskFile()->FileName() << endl;
         state_.set_not_ok();
         state_.release(inputbuffer);
         return NULL;
@@ -320,10 +327,15 @@
 
       // at this point, returning to caller is possible if another pipeline stage is inserted: it
       // would allow another async read to be requested or other processing to occur.
-
+printf("%u suspending for read %lu bytes @ %llu\n", inputbuffer->id_, inputbuffer->get_aiocb().len_, inputbuffer->get_aiocb().off_);
       inputbuffer->get_aiocb().suspend_until_completed();
+printf("%u suspending completed\n", inputbuffer->id_);
       if (!inputbuffer->get_aiocb().completedOK() || !static_cast<SUBCLASS*> (this)->on_inputbuffer_read(inputbuffer)) {
 //printf("completion of reading DiskFile %s failed\n", (*inputblock)->GetDiskFile()->FileName().c_str());
+    #ifndef NDEBUG
+{int err = errno; fprintf(stderr, "error %d: %s, # of open files = %u\n", err, strerror(err), (unsigned) state_.open_diskfile_count()); fflush(stderr);}
+    #endif
+        cerr << "unable to complete async read of " << (*inputblock)->GetDiskFile()->FileName() << endl;
         state_.set_not_ok();
         state_.release(inputbuffer);
         return NULL;
@@ -353,6 +365,10 @@
       }
     }
 
+#ifdef DEBUG_ASYNC_WRITE
+    inputbuffer->inputblock_ = inputblock;
+#endif
+
     return inputbuffer;
   }
 
@@ -377,21 +393,29 @@
 //printf("filter_process_base::operator()\n");
 
 //printf("inputbuffer->get_inputindex()=%u\n", inputbuffer->get_inputindex());
-    delegate_.ProcessDataConcurrently(state_.blocklength(), inputbuffer->get_inputindex(), inputbuffer->get());
+    delegate_.ProcessDataConcurrently(state_.blocklength(), inputbuffer->get_inputindex(), *inputbuffer);
 
-    if (buffer::ASYNC_WRITE == inputbuffer->get_write_status()) {
+    if (pipeline_buffer::ASYNC_WRITE == inputbuffer->get_write_status()) {
+#ifdef DEBUG_ASYNC_WRITE
+printf("waiting for async write at off=%llu to complete\n", (*inputbuffer->inputblock_)->GetOffset());
+// used to debug the problem where the last byte of the file was not being written to - the bug fix is
+// in diskfile.cpp: DiskFile::Create()
+if (102387 == (*inputbuffer->inputblock_)->GetOffset()) {
+  for (unsigned i = 0; i != state_.blocklength(); ++i)
+    printf("%02x ", ((const unsigned char*) inputbuffer->get())[i]);
+  printf("\n");
+}
+#endif
       inputbuffer->get_aiocb().suspend_until_completed();
       if (!inputbuffer->get_aiocb().completedOK()) {
         state_.set_not_ok();
 //printf("writing inputbuffer=%p completed unsuccessfully\n", inputbuffer);
       }
-      inputbuffer->set_write_status(buffer::NONE);
+      inputbuffer->set_write_status(pipeline_buffer::NONE);
     }
 
     state_.release(inputbuffer);
     return NULL;
   }
 
-  #endif
-#endif
-
+#endif // WANT_CONCURRENT && CONCURRENT_PIPELINE

@@ -1,7 +1,7 @@
 //  This file is part of par2cmdline (a PAR 2.0 compatible file verification and
 //  repair tool). See http://parchive.sourceforge.net for details of PAR 2.0.
 //
-//  Copyright (c) 2008 Vincent Tan, created 2008-09-17. par2pipeline.cpp
+//  Copyright (c) 2008 Vincent Tan, created 2008-09-20. buffer.h
 //
 //  par2cmdline is free software; you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
@@ -25,11 +25,53 @@
 
 #include "par2cmdline.h"
 
-// implements async I/O using a TBB pipeline
+#undef DEBUG_BUFFERS
 
-#if HAVE_ASYNC_IO && !defined(NDEBUG) && !defined(WIN32)
-extern bool want_printf(int res);
-bool want_printf(int res) {
-  return 0 != res && EAGAIN != res;
-}
-#endif
+// implements a refcounted buffer
+
+  #if GPGPU_CUDA
+    #include "cuda.h"
+  #endif
+
+  class buffer {
+  private:
+    u8* buffer_;
+
+  #if GPGPU_CUDA
+    bool buffer_allocated_by_gpu_;
+  #endif
+
+  #if !defined(NDEBUG) && defined(DEBUG_BUFFERS)
+  public:
+    unsigned id_;
+  private:
+  #endif
+
+    //buffer(buffer&);
+    //buffer& operator=(const buffer&);
+
+  public:
+    buffer(void);
+    ~buffer(void);
+    bool alloc(size_t sz);
+
+    const u8* get(void) const { return buffer_; }
+    u8* get(void) { return buffer_; }
+  }; // buffer
+
+  #if WANT_CONCURRENT
+  class rcbuffer : public buffer {
+  private:
+    tbb::atomic<int> refcount_;
+
+    friend class pipeline_state_base;
+    bool try_to_acquire(void);
+
+  protected:
+    rcbuffer(void);
+
+  public:
+    void add_ref(void);
+    int release(void);
+  }; // rcbuffer
+  #endif

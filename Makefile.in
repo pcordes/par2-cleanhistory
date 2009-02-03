@@ -33,8 +33,10 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 bin_PROGRAMS = par2$(EXEEXT)
-@PLATFORM_DARWIN_TRUE@@X86CPU_TRUE@am__append_1 = -isysroot /Developer/SDKs/MacOSX10.4u.sdk
-@PLATFORM_DARWIN_TRUE@@PPC32_TRUE@am__append_2 = -isysroot /Developer/SDKs/MacOSX10.4u.sdk
+#par2_DEPENDENCIES = /Developer/CUDA/lib/libpar2_cuda.dylib
+@GPGPU_CUDA_TRUE@@PLATFORM_DARWIN_TRUE@@X86CPU_TRUE@am__append_1 = -Wl,-rpath -Wl,/usr/local/cuda/lib -L/Developer/CUDA/lib -lpar2_cuda
+@GPGPU_CUDA_FALSE@@PLATFORM_DARWIN_TRUE@@X86CPU_TRUE@am__append_2 = -isysroot /Developer/SDKs/MacOSX10.4u.sdk
+@PLATFORM_DARWIN_TRUE@@PPC32_TRUE@am__append_3 = -isysroot /Developer/SDKs/MacOSX10.4u.sdk
 subdir = .
 DIST_COMMON = README $(am__configure_deps) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in $(srcdir)/config.h.in \
@@ -53,9 +55,10 @@ CONFIG_CLEAN_FILES = stamp-h
 am__installdirs = "$(DESTDIR)$(bindir)"
 binPROGRAMS_INSTALL = $(INSTALL_PROGRAM)
 PROGRAMS = $(bin_PROGRAMS)
-am__par2_SOURCES_DIST = par2cmdline.cpp par2cmdline.h commandline.cpp \
-	commandline.h crc.cpp crc.h creatorpacket.cpp creatorpacket.h \
-	criticalpacket.cpp criticalpacket.h datablock.cpp datablock.h \
+am__par2_SOURCES_DIST = par2cmdline.cpp par2cmdline.h buffer.cpp \
+	buffer.h commandline.cpp commandline.h crc.cpp crc.h \
+	creatorpacket.cpp creatorpacket.h criticalpacket.cpp \
+	criticalpacket.h datablock.cpp datablock.h \
 	descriptionpacket.cpp descriptionpacket.h diskfile.cpp \
 	diskfile.h filechecksummer.cpp filechecksummer.h galois.cpp \
 	galois.h letype.h mainpacket.cpp mainpacket.h md5.cpp md5.h \
@@ -63,14 +66,15 @@ am__par2_SOURCES_DIST = par2cmdline.cpp par2cmdline.h commandline.cpp \
 	par1repairer.h par1repairersourcefile.cpp \
 	par1repairersourcefile.h par2creator.cpp par2creator.h \
 	par2creatorsourcefile.cpp par2creatorsourcefile.h \
-	par2fileformat.cpp par2fileformat.h par2pipeline.cpp \
-	par2pipeline.h par2repairer.cpp par2repairer.h \
-	par2repairersourcefile.cpp par2repairersourcefile.h \
+	par2fileformat.cpp par2fileformat.h par2repairer.cpp \
+	par2repairer.h par2repairersourcefile.cpp \
+	par2repairersourcefile.h pipeline.cpp pipeline.h \
 	recoverypacket.cpp recoverypacket.h reedsolomon.cpp \
 	reedsolomon.h verificationhashtable.cpp \
 	verificationhashtable.h verificationpacket.cpp \
 	verificationpacket.h reedsolomon-$(ARCH)-scalar-$(PLATFORM).s \
-	reedsolomon-$(ARCH_MMX)-mmx-$(PLATFORM).s detect-mmx.s
+	reedsolomon-$(ARCH_MMX)-mmx-$(PLATFORM).s detect-mmx.s \
+	cuda.cpp cuda.h
 @PLATFORM_DARWIN_FALSE@am__objects_1 = detect-mmx.$(OBJEXT)
 @AMD64_FALSE@@X86CPU_TRUE@am__objects_2 = reedsolomon-$(ARCH)-scalar-$(PLATFORM).$(OBJEXT) \
 @AMD64_FALSE@@X86CPU_TRUE@	reedsolomon-$(ARCH_MMX)-mmx-$(PLATFORM).$(OBJEXT) \
@@ -78,18 +82,20 @@ am__par2_SOURCES_DIST = par2cmdline.cpp par2cmdline.h commandline.cpp \
 @AMD64_TRUE@am__objects_2 =  \
 @AMD64_TRUE@	reedsolomon-$(ARCH)-scalar-$(PLATFORM).$(OBJEXT) \
 @AMD64_TRUE@	reedsolomon-$(ARCH_MMX)-mmx-$(PLATFORM).$(OBJEXT)
-am_par2_OBJECTS = par2cmdline.$(OBJEXT) commandline.$(OBJEXT) \
-	crc.$(OBJEXT) creatorpacket.$(OBJEXT) criticalpacket.$(OBJEXT) \
-	datablock.$(OBJEXT) descriptionpacket.$(OBJEXT) \
-	diskfile.$(OBJEXT) filechecksummer.$(OBJEXT) galois.$(OBJEXT) \
+@GPGPU_CUDA_TRUE@@PLATFORM_DARWIN_TRUE@@X86CPU_TRUE@am__objects_3 = cuda.$(OBJEXT)
+am_par2_OBJECTS = par2cmdline.$(OBJEXT) buffer.$(OBJEXT) \
+	commandline.$(OBJEXT) crc.$(OBJEXT) creatorpacket.$(OBJEXT) \
+	criticalpacket.$(OBJEXT) datablock.$(OBJEXT) \
+	descriptionpacket.$(OBJEXT) diskfile.$(OBJEXT) \
+	filechecksummer.$(OBJEXT) galois.$(OBJEXT) \
 	mainpacket.$(OBJEXT) md5.$(OBJEXT) par1fileformat.$(OBJEXT) \
 	par1repairer.$(OBJEXT) par1repairersourcefile.$(OBJEXT) \
 	par2creator.$(OBJEXT) par2creatorsourcefile.$(OBJEXT) \
-	par2fileformat.$(OBJEXT) par2pipeline.$(OBJEXT) \
-	par2repairer.$(OBJEXT) par2repairersourcefile.$(OBJEXT) \
+	par2fileformat.$(OBJEXT) par2repairer.$(OBJEXT) \
+	par2repairersourcefile.$(OBJEXT) pipeline.$(OBJEXT) \
 	recoverypacket.$(OBJEXT) reedsolomon.$(OBJEXT) \
 	verificationhashtable.$(OBJEXT) verificationpacket.$(OBJEXT) \
-	$(am__objects_2)
+	$(am__objects_2) $(am__objects_3)
 par2_OBJECTS = $(am_par2_OBJECTS)
 par2_LDADD = $(LDADD)
 par2_DEPENDENCIES =
@@ -234,12 +240,21 @@ top_srcdir = @top_srcdir@
 @PLATFORM_DARWIN_TRUE@PLATFORM = darwin
 @PLATFORM_DARWIN_FALSE@FLAGS_ARCH = 
 @PLATFORM_DARWIN_TRUE@FLAGS_ARCH = -arch $(ARCH)
-@PLATFORM_DARWIN_FALSE@ASMOBJECTS_PLATFORM = detect-mmx.s
-@PLATFORM_DARWIN_TRUE@ASMOBJECTS_PLATFORM = 
+@PLATFORM_DARWIN_FALSE@ASMSOURCES_PLATFORM = detect-mmx.s
+@PLATFORM_DARWIN_TRUE@ASMSOURCES_PLATFORM = 
 @PLATFORM_DARWIN_TRUE@CXXFLAGS_DARWIN = #  because the functions in the .s files process RS data
-@AMD64_TRUE@ASMOBJECTS = reedsolomon-$(ARCH)-scalar-$(PLATFORM).s reedsolomon-$(ARCH_MMX)-mmx-$(PLATFORM).s
-@X86CPU_TRUE@ASMOBJECTS = reedsolomon-$(ARCH)-scalar-$(PLATFORM).s reedsolomon-$(ARCH_MMX)-mmx-$(PLATFORM).s $(ASMOBJECTS_PLATFORM)
+@AMD64_TRUE@ASMSOURCES = reedsolomon-$(ARCH)-scalar-$(PLATFORM).s reedsolomon-$(ARCH_MMX)-mmx-$(PLATFORM).s
+@X86CPU_TRUE@ASMSOURCES = reedsolomon-$(ARCH)-scalar-$(PLATFORM).s reedsolomon-$(ARCH_MMX)-mmx-$(PLATFORM).s $(ASMSOURCES_PLATFORM)
+# ERROR: Darwin builds of par2 only supports CUDA on the i686 architecture (because CUDA ships as a 32-bit dylib that requires 10.5.2)
+@GPGPU_CUDA_FALSE@AM_CXXFLAGS_GPGPU = 
+@GPGPU_CUDA_TRUE@AM_CXXFLAGS_GPGPU = # -I/usr/local/cuda/include
+@GPGPU_CUDA_FALSE@AM_LDFLAGS_GPGPU = 
+@GPGPU_CUDA_TRUE@AM_LDFLAGS_GPGPU = -L/usr/local/cuda/lib -lcudart \
+@GPGPU_CUDA_TRUE@	$(am__append_1)
+@GPGPU_CUDA_FALSE@GPGPU_SOURCES = 
+@GPGPU_CUDA_TRUE@@PLATFORM_DARWIN_TRUE@@X86CPU_TRUE@GPGPU_SOURCES = cuda.cpp cuda.h
 par2_SOURCES = par2cmdline.cpp par2cmdline.h \
+	buffer.cpp buffer.h \
 	commandline.cpp commandline.h \
 	crc.cpp crc.h \
 	creatorpacket.cpp creatorpacket.h \
@@ -258,28 +273,32 @@ par2_SOURCES = par2cmdline.cpp par2cmdline.h \
 	par2creator.cpp par2creator.h \
 	par2creatorsourcefile.cpp par2creatorsourcefile.h \
 	par2fileformat.cpp par2fileformat.h \
-	par2pipeline.cpp par2pipeline.h \
 	par2repairer.cpp par2repairer.h \
 	par2repairersourcefile.cpp par2repairersourcefile.h \
+	pipeline.cpp pipeline.h \
 	recoverypacket.cpp recoverypacket.h \
 	reedsolomon.cpp reedsolomon.h \
 	verificationhashtable.cpp verificationhashtable.h \
 	verificationpacket.cpp verificationpacket.h \
-	$(ASMOBJECTS)
+	$(ASMSOURCES) $(GPGPU_SOURCES)
 
 LDADD = -lstdc++ -ltbb -L.
 @PLATFORM_DARWIN_TRUE@AM_CXXFLAGS = -Wall \
 @PLATFORM_DARWIN_TRUE@	-I$(top_srcdir)/../tbb21_009oss/include \
 @PLATFORM_DARWIN_TRUE@	-gfull -O3 -fvisibility=hidden \
 @PLATFORM_DARWIN_TRUE@	-fvisibility-inlines-hidden \
-@PLATFORM_DARWIN_TRUE@	$(CXXFLAGS_DARWIN) $(FLAGS_ARCH) \
-@PLATFORM_DARWIN_TRUE@	$(am__append_1) $(am__append_2)
-@PLATFORM_FREEBSD_TRUE@AM_CXXFLAGS = -Wall -I/usr/local/include $(FLAGS_ARCH)
-@PLATFORM_LINUX_TRUE@AM_CXXFLAGS = -Wall -I$(top_srcdir)/../tbb21_009oss/include $(FLAGS_ARCH)
+@PLATFORM_DARWIN_TRUE@	$(CXXFLAGS_DARWIN) $(AM_CXXFLAGS_GPGPU) \
+@PLATFORM_DARWIN_TRUE@	$(FLAGS_ARCH) $(am__append_2) \
+@PLATFORM_DARWIN_TRUE@	$(am__append_3)
+@PLATFORM_FREEBSD_TRUE@AM_CXXFLAGS = -Wall -I/usr/local/include $(AM_CXXFLAGS_GPGPU) $(FLAGS_ARCH)
+@PLATFORM_LINUX_TRUE@AM_CXXFLAGS = -Wall -I$(top_srcdir)/../tbb21_009oss/include $(AM_CXXFLAGS_GPGPU) $(FLAGS_ARCH)
+@GPGPU_CUDA_FALSE@@PLATFORM_DARWIN_TRUE@@X86CPU_TRUE@AM_LDFLAGS = -mmacosx-version-min=10.4
+@GPGPU_CUDA_TRUE@@PLATFORM_DARWIN_TRUE@@X86CPU_TRUE@AM_LDFLAGS = $(AM_LDFLAGS_GPGPU)
 @PLATFORM_DARWIN_TRUE@@PPC32_TRUE@AM_LDFLAGS = -mmacosx-version-min=10.4
-@PLATFORM_DARWIN_TRUE@@X86CPU_TRUE@AM_LDFLAGS = -mmacosx-version-min=10.4
-@PLATFORM_FREEBSD_TRUE@AM_LDFLAGS = -L/usr/local/lib
-@PLATFORM_LINUX_TRUE@AM_LDFLAGS = '-Wl,-R,$$ORIGIN'
+@PLATFORM_FREEBSD_TRUE@AM_LDFLAGS = -L/usr/local/lib $(AM_LDFLAGS_GPGPU)
+@PLATFORM_LINUX_TRUE@AM_LDFLAGS = '-Wl,-R,$$ORIGIN' $(AM_LDFLAGS_GPGPU)
+@PLATFORM_FREEBSD_TRUE@AM_CCASFLAGS = -Wa,-I$(top_srcdir)
+@PLATFORM_LINUX_TRUE@AM_CCASFLAGS = -Wa,-I$(top_srcdir)
 EXTRA_DIST = PORTING ROADMAP par2cmdline.sln par2cmdline.vcproj \
 	testdata.tar.gz pretest test1 test2 test3 test4 test5 test6 \
 	posttest \
@@ -388,10 +407,12 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/buffer.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/commandline.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/crc.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/creatorpacket.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/criticalpacket.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cuda.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/datablock.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/descriptionpacket.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/diskfile.Po@am__quote@
@@ -406,9 +427,9 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/par2creator.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/par2creatorsourcefile.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/par2fileformat.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/par2pipeline.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/par2repairer.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/par2repairersourcefile.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pipeline.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/recoverypacket.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/reedsolomon.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/verificationhashtable.Po@am__quote@

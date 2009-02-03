@@ -242,7 +242,8 @@ typedef unsigned long long u64;
 #  endif
 #endif
 
-#if HAVE_AIO_H && HAVE_ERRNO_H
+// Using async I/O on FreeBSD causes a crash. Cause unknown.
+#if HAVE_AIO_H && HAVE_ERRNO_H && !defined(PLATFORM_FREEBSD)
 #  include <errno.h>
 #  include <aio.h>
 #  include <assert.h>
@@ -254,6 +255,10 @@ typedef unsigned long long u64;
   #endif
 
   struct aiocb_type : aiocb {
+//public:
+//off_t off_;
+//size_t len_;
+
   private:
     bool rw(int fildes, size_t sz, const void* buf, off_t off, bool want_write) {
       memset(this, 0, sizeof(aiocb));
@@ -261,6 +266,8 @@ typedef unsigned long long u64;
       this->aio_offset = off;        /* File offset */
       this->aio_buf = static_cast<volatile void*> (const_cast<void*> (buf));        /* Location of buffer */
       this->aio_nbytes = sz;        /* Length of transfer */
+//off_ = off;
+//len_ = sz;
   #ifndef NDEBUG
       int res = want_write ? ::aio_write(this) : ::aio_read(this);
       if (-1 == res)
@@ -273,9 +280,7 @@ typedef unsigned long long u64;
     }
 
   public:
-    aiocb_type(void) {
-    //memset(this, 0, sizeof(aiocb));
-    }
+    aiocb_type(void) {}
 
     bool read(int fildes, size_t sz, const void* buf, off_t off) {
       return rw(fildes, sz, buf, off, false);
@@ -286,9 +291,17 @@ typedef unsigned long long u64;
     }
 
     void suspend_until_completed(void) const {
+#ifndef NDEBUG
+      int res = ::aio_error(this);
+      if (EINPROGRESS != res) {
+if (res) printf("suspend_until_completed: aio_error() => %d, errno = %d\n", res, errno);
+        return;
+      }
+#endif
       const struct aiocb* l[1] = {this};
 #ifndef NDEBUG
-      int res = ::aio_suspend(l, 1, NULL);
+      res = ::aio_suspend(l, 1, NULL);
+if (EINTR != res && 0 != res) printf("res = %d, errno = %d\n", res, errno);
       assert(EINTR == res || 0 == res);
 //    if (!(EINTR == res || 0 == res)) printf("aio_suspend(%p) -> %d (%s)\n", this, res, strerror(res));
 #else
@@ -513,9 +526,10 @@ using namespace std;
 #include "filechecksummer.h"
 #include "verificationhashtable.h"
 
+#include "pipeline.h"
+
 #include "par2creator.h"
 #include "par2repairer.h"
-#include "par2pipeline.h"
 
 #include "par1fileformat.h"
 #include "par1repairersourcefile.h"

@@ -19,9 +19,15 @@
 //
 //  Modifications for concurrent processing, async I/O, Unicode support, and
 //  hierarchial directory support are Copyright (c) 2007-2008 Vincent Tan.
+//
+//  Modifications for GPGPU support using nVidia CUDA technology are
+//  Copyright (c) 2008 Vincent Tan.
+//
 //  Search for "#if WANT_CONCURRENT" for concurrent code.
 //  Concurrent processing utilises Intel Thread Building Blocks 2.0,
 //  Copyright (c) 2007 Intel Corp.
+//
+//  par2cmdline-0.4-tbb is available at http://chuchusoft.com/par2_tbb
 
 #include "par2cmdline.h"
 
@@ -32,7 +38,7 @@
   #include  <set>
 
   #if CONCURRENT_PIPELINE
-    class repair_buffer : public buffer {
+    class repair_buffer : public pipeline_buffer {
       friend class repair_filter_read;
       vector<DataBlock*>::iterator copyblock_;
       bool                         copyblock_not_at_end_;
@@ -45,13 +51,14 @@
       vector<DataBlock*>::iterator                 copyblock_;
     public:
       repair_pipeline_state(
+        size_t                                     max_tokens,
         u64                                        chunksize,
         u32                                        missingblockcount,
         size_t                                     blocklength,
         u64                                        blockoffset,
         vector<DataBlock*>&                        inputblocks,
         vector<DataBlock*>&                        copyblocks) :
-        pipeline_state<repair_buffer>(chunksize, missingblockcount, blocklength, blockoffset, inputblocks),
+        pipeline_state<repair_buffer>(max_tokens, chunksize, missingblockcount, blocklength, blockoffset, inputblocks),
         copyblocks_(copyblocks), copyblock_(copyblocks.begin()) {}
     };
 
@@ -76,15 +83,32 @@
 //printf("%p: start async write to %s\n", pthread_self(), df->FileName().c_str());
             // Write the block back to disk in the new target file
 //printf("filter_read::operator()\n");
-            assert(buffer::NONE == ib->get_write_status());
+            assert(pipeline_buffer::NONE == ib->get_write_status());
 
+#ifdef DEBUG_ASYNC_WRITE
+// used to debug the problem where the last byte of the file was not being written to - the bug fix is
+// in diskfile.cpp: DiskFile::Create()
+printf("writing off=%llu len=%lu\n", (*ib->copyblock_)->GetOffset() + state_.blockoffset(), state_.blocklength());
+if (102388 == (*ib->copyblock_)->GetOffset()) {
+  for (unsigned i = 0; i != state_.blocklength(); ++i)
+    printf("%02x ", ((const unsigned char*) ib->get())[i]);
+  printf("\n");
+}
+#endif
             size_t wrote;
+#if 0
+// used to debug the problem where the last byte of the file was not being written to - the bug fix is
+// in diskfile.cpp: DiskFile::Create()
+            if (!(*ib->copyblock_)->WriteData(state_.blockoffset(), state_.blocklength(), ib->get(), wrote))
+              return false;
+#else
             if (!(*ib->copyblock_)->WriteDataAsync(ib->get_aiocb(), state_.blockoffset(),
                                                    state_.blocklength(), ib->get(), wrote)) {
               return false;
             }
 
-            ib->set_write_status(buffer::ASYNC_WRITE);
+            ib->set_write_status(pipeline_buffer::ASYNC_WRITE);
+#endif
             state_.add_to_totalwritten(wrote);
           }
           //++copyblock;
@@ -131,7 +155,7 @@ Par2Repairer::Par2Repairer(void)
 
 #if WANT_CONCURRENT && CONCURRENT_PIPELINE
 #else
-  inputbuffer = NULL;
+//inputbuffer = NULL;
 #endif
   outputbuffer = NULL;
 
@@ -146,11 +170,15 @@ Par2Repairer::Par2Repairer(void)
 
 Par2Repairer::~Par2Repairer(void)
 {
+#if WANT_CONCURRENT && CONCURRENT_PIPELINE && GPGPU_CUDA
+  cuda::DeallocateResources();
+#endif
+
 #if WANT_CONCURRENT && CONCURRENT_PIPELINE
   if (outputbuffer)
     tbb::cache_aligned_allocator<u8>().deallocate((u8*)outputbuffer, 0);
 #else
-  delete [] (u8*)inputbuffer;
+//delete [] (u8*)inputbuffer;
   delete [] (u8*)outputbuffer;
 #endif
 
@@ -1990,6 +2018,7 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
       {
         // Record the match
         currententry->SetBlock(diskfile, filechecksummer.Offset());
+//printf("%s match at %llu -> %u matches\n", matchtype == ePartialMatch ? "partial" : "full", filechecksummer.Offset(), 1 + count);
       }
 
       // Update the number of matches found
@@ -2610,6 +2639,12 @@ bool Par2Repairer::AllocateBuffers(size_t memorylimit)
     chunksize = (size_t)blocksize;
   }
 
+#if GPGPU_CUDA
+  // allocate the GPU output buffers
+  if (rs.has_gpu() && 0 == cuda::AllocateResources(missingblockcount, (size_t) chunksize))
+    rs.set_has_gpu(false);
+#endif
+
   // Allocate the two buffers
 #if WANT_CONCURRENT && CONCURRENT_PIPELINE
   typedef __TBB_TypeWithAlignmentAtLeastAsStrict(u8) element_type;
@@ -2618,7 +2653,9 @@ bool Par2Repairer::AllocateBuffers(size_t memorylimit)
   size_t sz = aligned_chunksize * missingblockcount * (DSTOUT?2:1);
   outputbuffer = tbb::cache_aligned_allocator<u8>().allocate(sz);//new u8[sz];
 #else
-  inputbuffer = new u8[(size_t)chunksize];
+  if (!inputbuffer.alloc((size_t)chunksize))
+    return false;
+//inputbuffer = new u8[(size_t)chunksize];
   outputbuffer = new u8[(size_t)chunksize * missingblockcount * (DSTOUT?2:1)];
 #endif
 
@@ -2629,7 +2666,7 @@ bool Par2Repairer::AllocateBuffers(size_t memorylimit)
 #if WANT_CONCURRENT && CONCURRENT_PIPELINE
   if (outputbuffer == NULL)
 #else
-  if (inputbuffer == NULL || outputbuffer == NULL)
+  if ( /* inputbuffer == NULL || */ outputbuffer == NULL)
 #endif
   {
     cerr << "Could not allocate buffer memory." << endl;
@@ -2642,8 +2679,18 @@ bool Par2Repairer::AllocateBuffers(size_t memorylimit)
 
 #if WANT_CONCURRENT
 
+void* Par2Repairer::OutputBufferAt(u32 outputindex) {
+  #if CONCURRENT_PIPELINE
+  // Select the appropriate part of the output buffer
+  return &((u8*)outputbuffer)[aligned_chunksize_ * outputindex * (DSTOUT?2:1)];
+  #else
+  // Select the appropriate part of the output buffer
+  return &((u8*)outputbuffer)[chunksize * outputindex * (DSTOUT?2:1)];
+  #endif
+}
+
 bool Par2Repairer::ProcessDataForOutputIndex_(u32 outputindex, u32 outputendindex, size_t blocklength,
-                                              u32 inputindex, void* inputbuffer) {
+                                              u32 inputindex, buffer& inputbuffer) {
   #if CONCURRENT_PIPELINE
     int val = (outputbuffer_element_state_[outputindex] -= 2); // 0 -> -2, 1 -> -1
     if (val < -2) { // index is already in use: defer its processing
@@ -2654,10 +2701,10 @@ bool Par2Repairer::ProcessDataForOutputIndex_(u32 outputindex, u32 outputendinde
     assert(val == -2 || val == -1); // ie, hold lock
 
     // Select the appropriate part of the output buffer
-    void *outbuf = &((u8*)outputbuffer)[aligned_chunksize_ * outputindex * (DSTOUT?2:1)];
+    void *outbuf = OutputBufferAt(outputindex);//&((u8*)outputbuffer)[aligned_chunksize_ * outputindex * (DSTOUT?2:1)];
   #else
     // Select the appropriate part of the output buffer
-    void *outbuf = &((u8*)outputbuffer)[chunksize * outputindex * (DSTOUT?2:1)];
+    void *outbuf = OutputBufferAt(outputindex);//&((u8*)outputbuffer)[chunksize * outputindex * (DSTOUT?2:1)];
     #if DSTOUT
     int val = outputbuffer_element_state_[outputindex];
     #endif
@@ -2715,7 +2762,7 @@ bool Par2Repairer::ProcessDataForOutputIndex_(u32 outputindex, u32 outputendinde
 }
 
 void Par2Repairer::ProcessDataForOutputIndex(u32 outputindex, u32 outputendindex, size_t blocklength,
-                                             u32 inputindex, void* inputbuffer)
+                                             u32 inputindex, buffer& inputbuffer)
 {
   std::vector<u32> v; // which indexes need deferred processing
   v.reserve(outputendindex - outputindex);
@@ -2740,7 +2787,7 @@ void Par2Repairer::ProcessDataForOutputIndex(u32 outputindex, u32 outputendindex
 
 class ApplyPar2RepairerRSProcess {
 public:
-  ApplyPar2RepairerRSProcess(Par2Repairer* obj, size_t blocklength, u32 inputindex, void* inputbuffer) :
+  ApplyPar2RepairerRSProcess(Par2Repairer* obj, size_t blocklength, u32 inputindex, buffer& inputbuffer) :
     _obj(obj), _blocklength(blocklength), _inputindex(inputindex), _inputbuffer(inputbuffer) {}
   void operator()(const tbb::blocked_range<u32>& r) const {
     _obj->ProcessDataForOutputIndex(r.begin(), r.end(), _blocklength, _inputindex, _inputbuffer);
@@ -2749,10 +2796,10 @@ private:
   Par2Repairer* _obj;
   size_t        _blocklength;
   u32           _inputindex;
-  void*         _inputbuffer;
+  buffer&       _inputbuffer;
 };
 
-void Par2Repairer::ProcessDataConcurrently(size_t blocklength, u32 inputindex, void* inputbuffer)
+void Par2Repairer::ProcessDataConcurrently(size_t blocklength, u32 inputindex, buffer& inputbuffer)
 {
   if (ALL_SERIAL != concurrent_processing_level) {
     static tbb::affinity_partitioner ap;
@@ -2793,7 +2840,8 @@ bool Par2Repairer::ProcessData(u64 blockoffset, size_t blocklength)
   {
 #if WANT_CONCURRENT && CONCURRENT_PIPELINE
 //cout << "Repairing using async I/O." << endl;
-    repair_pipeline_state s(chunksize, missingblockcount, blocklength, blockoffset, inputblocks, copyblocks);
+    const size_t max_tokens = ALL_SERIAL == concurrent_processing_level ? 1 : tbb::task_scheduler_init::default_num_threads();
+    repair_pipeline_state s(max_tokens, chunksize, missingblockcount, blocklength, blockoffset, inputblocks, copyblocks);
 
     tbb::pipeline p;
     repair_filter_read rfr(s);
@@ -2803,7 +2851,49 @@ bool Par2Repairer::ProcessData(u64 blockoffset, size_t blocklength)
     //repair_filter_write rfw(*this, s);
     //p.add_filter(rfw);
 
-    p.run(ALL_SERIAL == concurrent_processing_level ? 1 : tbb::task_scheduler_init::default_num_threads());
+    // For repairing, limit # of tokens in flight to the # of hardware threads available.
+    // If too many tokens are used then the async I/O gets deferred until the end of the
+    // repair phase, which nullifies any time advantage gained over using synchronous I/O.
+	p.run(max_tokens);
+
+  #if GPGPU_CUDA
+    if (rs.has_gpu()) {
+    #ifndef NDEBUG
+      CTimeInterval gpp("GPU postprocessing");
+    #endif
+
+      // do xor's of outputbuffers that are on the video card
+      repair_buffer* buf = s.first_available_buffer();
+      if (!buf) {
+        cerr << "Repair failed." << endl;
+        return false;
+      }
+
+      const u32 n = cuda::GetDeviceOutputBufferCount();
+      for (u32 i = 0; i != n; ++i) {
+        if (!cuda::CopyDeviceOutputBuffer(i, (u32*) buf->get())) {
+          cerr << "Failed to copy back data from video card. Repair failed." << endl;
+          return false;
+        }
+        cuda::Xor((u32*) OutputBufferAt(i), (const u32*) buf->get(), (size_t) chunksize);
+      }
+      s.release(buf);
+
+    #ifndef NDEBUG
+      gpp.emit();
+    #endif
+
+      const unsigned pc = cuda::GetProcessingCount();
+      if (0 == pc)
+        cout << "The GPU was not used for processing." << endl;
+      else {
+        u64 fraction = (1000 * (u64) pc) / ((u64) sourceblockcount * (u64) missingblockcount);
+        cout << "The GPU was used for " << fraction/10 << '.' << fraction%10 << "% of the processing (" <<
+          pc << " out of " << ((u64) sourceblockcount * (u64) missingblockcount) << " processing blocks)." << endl;
+      }
+    }
+  #endif
+
     p.clear();
 
     if (!s.is_ok()) {
@@ -2840,7 +2930,7 @@ bool Par2Repairer::ProcessData(u64 blockoffset, size_t blocklength)
       }
 
       // Read data from the current input block
-      if (!(*inputblock)->ReadData(blockoffset, blocklength, inputbuffer))
+      if (!(*inputblock)->ReadData(blockoffset, blocklength, inputbuffer.get()))
         return false;
 
       // Have we reached the last source data block
@@ -2852,7 +2942,7 @@ bool Par2Repairer::ProcessData(u64 blockoffset, size_t blocklength)
           size_t wrote;
 
           // Write the block back to disk in the new target file
-          if (!(*copyblock)->WriteData(blockoffset, blocklength, inputbuffer, wrote))
+          if (!(*copyblock)->WriteData(blockoffset, blocklength, inputbuffer.get(), wrote))
             return false;
 
           totalwritten += wrote;
@@ -2905,11 +2995,11 @@ bool Par2Repairer::ProcessData(u64 blockoffset, size_t blocklength)
 //ti_pd.emit();
     }
 #endif
-  }
-  else
-  {
+  } else for (;;) {
 #if WANT_CONCURRENT && CONCURRENT_PIPELINE
-    u8 *inputbuffer = new u8[(size_t)chunksize];             // Buffer for reading DataBlocks (chunksize)
+    buffer inputbuffer; // u8 *inputbuffer = new u8[(size_t)chunksize];             // Buffer for reading DataBlocks (chunksize)
+    if (!inputbuffer.alloc((size_t)chunksize))
+      break;
 #endif
     // Reconstruction is not required, we are just copying blocks between files
 
@@ -2937,11 +3027,11 @@ bool Par2Repairer::ProcessData(u64 blockoffset, size_t blocklength)
         }
 
         // Read data from the current input block
-        if (!(*inputblock)->ReadData(blockoffset, blocklength, inputbuffer))
+        if (!(*inputblock)->ReadData(blockoffset, blocklength, inputbuffer.get()))
           return false;
 
         size_t wrote;
-        if (!(*copyblock)->WriteData(blockoffset, blocklength, inputbuffer, wrote))
+        if (!(*copyblock)->WriteData(blockoffset, blocklength, inputbuffer.get(), wrote))
           return false;
         totalwritten += wrote;
       }
@@ -2974,11 +3064,12 @@ bool Par2Repairer::ProcessData(u64 blockoffset, size_t blocklength)
 
       ++copyblock;
       ++inputblock;
-    }
+    } // while
 #if WANT_CONCURRENT && CONCURRENT_PIPELINE
-    delete [] inputbuffer;
+    //delete [] inputbuffer;
 #endif
-  }
+    break;
+  } // for(;;)
 
   // Close the last file
   if (lastopenfile != NULL)
@@ -2988,7 +3079,10 @@ bool Par2Repairer::ProcessData(u64 blockoffset, size_t blocklength)
 
   if (noiselevel > CommandLine::nlQuiet)
     cout << "Writing recovered data\r";
-
+#undef DUMP_OUTPUT // #define
+#ifdef DUMP_OUTPUT
+  FILE* of = fopen("dump.txt", "w+b");
+#endif
   // For each output block that has been recomputed
   vector<DataBlock*>::iterator outputblock = outputblocks.begin();
   for (u32 outputindex=0; outputindex<missingblockcount;outputindex++)
@@ -3022,8 +3116,18 @@ bool Par2Repairer::ProcessData(u64 blockoffset, size_t blocklength)
 #endif
     totalwritten += wrote;
 
+#ifdef DUMP_OUTPUT
+	char s[128];
+    sprintf(s, "off=%llu len=%lu wrote=%lu\n", blockoffset, blocklength, wrote);
+    fwrite(s, strlen(s), 1, of);
+    fwrite(outbuf, blocklength, 1, of);
+#endif
+
     ++outputblock;
   }
+#ifdef DUMP_OUTPUT
+  fclose(of);
+#endif
 
   if (noiselevel > CommandLine::nlQuiet)
     cout << "Wrote " << totalwritten << " bytes to disk" << endl;

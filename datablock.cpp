@@ -158,6 +158,7 @@ bool DataBlock::WriteDataAsync(aiocb_type& cb, u64 position, size_t size, const 
   size_t write_length = (size_t)min((u64)size, length - position);
 
   // Write the data from the buffer to disk
+//printf("DataBlock::WriteDataAsync(): writing %lu bytes\n", write_length);
   if (!diskfile->WriteAsync(cb, fileoffset, buffer, write_length))
     return false;
 
