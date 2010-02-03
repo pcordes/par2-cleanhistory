@@ -22,28 +22,28 @@
 bin_PROGRAMS = par2
 
 if AMD64
-ARCH = x86_64
+ARCH_SCALAR = x86_64
 ARCH_MMX = x86_64
 endif
 if X86MMX
-ARCH = i386
+ARCH_SCALAR = i386
 ARCH_MMX = i686
 else
 if X86CPU
-ARCH = i386
+ARCH_SCALAR = i386
 ARCH_MMX = i686
 endif
 endif
 if PPC64
-ARCH = ppc64
+ARCH_SCALAR = ppc64
 endif
 if PPC32
-ARCH = ppc
+ARCH_SCALAR = ppc
 endif
 
 if PLATFORM_DARWIN
 PLATFORM = darwin
-FLAGS_ARCH = -arch $(ARCH)
+FLAGS_ARCH = -arch $(ARCH_SCALAR)
 ASMSOURCES_PLATFORM = 
 CXXFLAGS_DARWIN =                                 #  because the functions in the .s files process RS data
 #CXXFLAGS_DARWIN = -fomit-frame-pointer           <= if you want GCC to produce slightly better scalar x86 code
@@ -55,10 +55,10 @@ ASMSOURCES_PLATFORM = detect-mmx.s
 endif
 
 if AMD64
-ASMSOURCES = reedsolomon-$(ARCH)-scalar-$(PLATFORM).s reedsolomon-$(ARCH_MMX)-mmx-$(PLATFORM).s
+ASMSOURCES = reedsolomon-$(ARCH_SCALAR)-scalar-$(PLATFORM).s reedsolomon-$(ARCH_MMX)-mmx-$(PLATFORM).s
 endif
 if X86CPU
-ASMSOURCES = reedsolomon-$(ARCH)-scalar-$(PLATFORM).s reedsolomon-$(ARCH_MMX)-mmx-$(PLATFORM).s $(ASMSOURCES_PLATFORM)
+ASMSOURCES = reedsolomon-$(ARCH_SCALAR)-scalar-$(PLATFORM).s reedsolomon-$(ARCH_MMX)-mmx-$(PLATFORM).s $(ASMSOURCES_PLATFORM)
 endif
 
 if GPGPU_CUDA
@@ -113,17 +113,24 @@ par2_SOURCES = par2cmdline.cpp par2cmdline.h \
 
 LDADD = -lstdc++ -ltbb -L.
 if PLATFORM_DARWIN
-AM_CXXFLAGS = -Wall -I$(top_srcdir)/../tbb21_009oss/include -gfull -O3 -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS_DARWIN) $(AM_CXXFLAGS_GPGPU) $(FLAGS_ARCH)
+AM_CXXFLAGS = -Wall -I$(top_srcdir)/../tbb22_20090809oss_src/include -gfull -O3 -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS_DARWIN) $(AM_CXXFLAGS_GPGPU) $(FLAGS_ARCH)
+if AMD64
+AM_CXXFLAGS += -mmacosx-version-min=10.5 -isysroot /Developer/SDKs/MacOSX10.5.sdk
+AM_LDFLAGS = -mmacosx-version-min=10.5
+endif
 if X86CPU
 if GPGPU_CUDA    # CUDA mandates 10.5 so the two are mutally exclusive: either CUDA or 10.4u support but not both
-AM_LDFLAGS = $(AM_LDFLAGS_GPGPU)
+AM_CXXFLAGS += -mmacosx-version-min=10.5 -isysroot /Developer/SDKs/MacOSX10.5.sdk
+AM_LDFLAGS = -mmacosx-version-min=10.5 $(AM_LDFLAGS_GPGPU)
 else
-AM_CXXFLAGS += -isysroot /Developer/SDKs/MacOSX10.4u.sdk
+# because MacOSX10.4u.sdk requires g++ 4.0, you must invoke configure with: CXX=g++-4.0
+AM_CXXFLAGS += -mmacosx-version-min=10.4 -isysroot /Developer/SDKs/MacOSX10.4u.sdk
 AM_LDFLAGS = -mmacosx-version-min=10.4
 endif
 endif
 if PPC32
-AM_CXXFLAGS += -isysroot /Developer/SDKs/MacOSX10.4u.sdk
+# because MacOSX10.4u.sdk requires g++ 4.0, you must invoke configure with: CXX=g++-4.0
+AM_CXXFLAGS += -mmacosx-version-min=10.4 -isysroot /Developer/SDKs/MacOSX10.4u.sdk
 AM_LDFLAGS = -mmacosx-version-min=10.4
 endif
 endif
@@ -134,7 +141,7 @@ AM_CCASFLAGS = -Wa,-I$(top_srcdir)
 AM_LDFLAGS = -L/usr/local/lib $(AM_LDFLAGS_GPGPU)
 endif
 if PLATFORM_LINUX
-AM_CXXFLAGS = -Wall -I$(top_srcdir)/../tbb21_009oss/include $(AM_CXXFLAGS_GPGPU) $(FLAGS_ARCH)
+AM_CXXFLAGS = -Wall -I$(top_srcdir)/../tbb22_20090809oss/include $(AM_CXXFLAGS_GPGPU) $(FLAGS_ARCH)
 AM_CCASFLAGS = -Wa,-I$(top_srcdir)
 AM_LDFLAGS = '-Wl,-R,$$ORIGIN' $(AM_LDFLAGS_GPGPU)
 endif

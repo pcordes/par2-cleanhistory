@@ -6,5 +6,7 @@ Then use the 'nmake' command to build the binary. The result should be a file
 named par2_win64.exe in the par2cmdline-0.4-tbb-<version> directory. This can
 then be renamed to par2.exe if so desired.
 
+More information is in the Makefile's comments.
+
 Vincent Tan.
-April 20, 2008.
+February 3, 2010.

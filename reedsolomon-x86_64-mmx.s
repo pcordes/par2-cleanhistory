@@ -39,12 +39,13 @@
 	push		%rbx
 
 	mov			%rcx, %rbp						# combined multiplication table
-	mov			%rdx, %rcx						# number of bytes to process (multiple of 16)
+	mov			%rdx, %rcx						# number of bytes to process (multiple of 8)
 
 	mov			(%rsi), %edx					# load 1st 8 source bytes
 	movd		4(%rsi), %mm4
 
 	sub			$8, %rcx						# reduce # of loop iterations by 1
+	jz			last8
 	add			%rcx, %rsi						# point to last set of 8-bytes of input
 	add			%rcx, %rdi						# point to last set of 8-bytes of output
 	neg			%rcx							# convert byte size to count-up
@@ -87,6 +88,7 @@ loop:
 	#
 	# handle final iteration separately (so that a read beyond the end of the input/output buffer is avoided)
 	#
+last8:
 	movzx		%dl, %eax
 	movzx		%dh, %ebx
 	movd		0x0000(%rbp, %rax, 4), %mm0
