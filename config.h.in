@@ -55,6 +55,12 @@
 /* Define to 1 if you have the <stdlib.h> header file. */
 #undef HAVE_STDLIB_H
 
+/* Define to 1 if std::auto_ptr<T> exists in <memory> */
+#undef HAVE_STD_AUTO_PTR
+
+/* Define to 1 if std::unique_ptr<T> exists in <memory> */
+#undef HAVE_STD_UNIQUE_PTR
+
 /* Define to 1 if you have the `strcasecmp' function. */
 #undef HAVE_STRCASECMP
 

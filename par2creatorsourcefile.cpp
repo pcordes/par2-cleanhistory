@@ -61,7 +61,8 @@ Par2CreatorSourceFile::~Par2CreatorSourceFile(void)
 // 16k of the file, and then compute the FileId and store the results
 // in a file description packet and a file verification packet.
 
-bool Par2CreatorSourceFile::Open(CommandLine::NoiseLevel noiselevel, const CommandLine::ExtraFile &extrafile, u64 blocksize, bool deferhashcomputation
+bool Par2CreatorSourceFile::Open(CommandLine::NoiseLevel noiselevel,
+  const CommandLine::ExtraFile &extrafile, u64 blocksize, bool deferhashcomputation
 #if WANT_CONCURRENT_PAR2_FILE_OPENING
   , tbb::mutex& cout_mutex, tbb::tick_count& last_cout
 #endif
@@ -334,7 +335,13 @@ void Par2CreatorSourceFile::Close(void)
 }
 
 
+#if WANT_CONCURRENT
+// 2014/11/25 this version is thread safe (criticalpackets will not be corrupted by multiple threads)
+void Par2CreatorSourceFile::RecordCriticalPackets(tbb::concurrent_vector<CriticalPacket*> &criticalpackets)
+#else
+// 2014/11/25 this version is not thread safe
 void Par2CreatorSourceFile::RecordCriticalPackets(list<CriticalPacket*> &criticalpackets)
+#endif
 {
   // Add the file description packet and file verification packet to
   // the critical packet list.

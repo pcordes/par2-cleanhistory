@@ -30,7 +30,11 @@ static char THIS_FILE[]=__FILE__;
 bool CriticalPacket::WritePacket(DiskFile &diskfile, u64 fileoffset) const
 {
   assert(&diskfile != 0 && packetdata != 0 && packetlength != 0);
-
+#if 0 // for debugging packet problems
+cout << "CriticalPacket::WritePacket(" << diskfile.FileName() << ", " <<
+fileoffset << ") w/packetlength " << packetlength << " w/type " <<
+string((const char*) (((const PACKET_HEADER*)packetdata)->type.type+8)).substr(0, 8) << endl;
+#endif
   return diskfile.Write(fileoffset, packetdata, packetlength);
 }
 

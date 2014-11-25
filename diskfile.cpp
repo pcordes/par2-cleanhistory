@@ -65,7 +65,7 @@ DiskFile::~DiskFile(void)
 
 // Create new file on disk and make sure that there is enough
 // space on disk for it.
-bool DiskFile::Create(string _filename, u64 _filesize, bool async)
+bool DiskFile::Create(const string &_filename, u64 _filesize, bool async)
 {
   assert(hFile == INVALID_HANDLE_VALUE);
 
@@ -199,7 +199,7 @@ bool DiskFile::WriteAsync(aiocb_type& cb, u64 offset, const void *buffer, size_t
 
 // Open the file
 
-bool DiskFile::Open(string _filename, u64 _filesize, bool async)
+bool DiskFile::Open(const string &_filename, u64 _filesize, bool async)
 {
   assert(hFile == INVALID_HANDLE_VALUE);
 
@@ -292,59 +292,78 @@ void DiskFile::Close(void)
   }
 }
 
-string DiskFile::GetCanonicalPathname(string filename)
-{
 #ifdef UNICODE
-  typedef wstring TSTRING;
+	typedef wstring TSTRING;
 #else
-  typedef string TSTRING;
+	typedef string TSTRING;
 #endif
 
-  TCHAR fullname[MAX_PATH];
-  TCHAR *filepart;
+static TSTRING& substitute(TSTRING& s, TCHAR from, TCHAR to) {
+  for(TSTRING::size_type pos = 0;;) {
+    pos = s.find(from, pos);
+	if (TSTRING::npos == pos)
+      break;
+    s[pos] = to;
+  }
+  return s;
+}
 
+string DiskFile::GetCanonicalPathname(string filename)
+{
   // Resolve a relative path to a full path
-  int length = ::GetFullPathName(utf8_string_to_native_char_array(filename),
-                                 sizeof(fullname)/sizeof(TCHAR), fullname, &filepart);
-  if (length <= 0 || (sizeof(fullname)/sizeof(TCHAR)) < length)
-    return filename;
+  TCHAR *filepart = NULL;
+  DWORD length = ::GetFullPathName(utf8_string_to_native_char_array(filename), 0, NULL, &filepart);
+  if (0 == length)
+    return filename; // ???what went wrong???
 
-  // Make sure the drive letter is upper case.
-  fullname[0] = toupper(fullname[0]);
+  TSTRING fullname(length, _TEXT(' '));
+  length = ::GetFullPathName(utf8_string_to_native_char_array(filename),
+                             (DWORD) fullname.length(), &fullname[0], &filepart);
+  if (0 == length)
+    return filename; // ???what went wrong???
 
   // Translate all /'s to \'s
-  TCHAR *current = _tcschr/*strchr*/(fullname, '/');
-  while (current)
-  {
-    *current++ = '\\';
-    current  = _tcschr/*strchr*/(current, '/');
+  substitute(fullname, _TEXT('/'), _TEXT('\\'));
+
+  // 2013/12/29 added handling of UNC paths
+  string::size_type current;
+  if (0 == fullname.find(_TEXT("\\\\?\\UNC\\")))
+    current = 8;
+  else if (0 == fullname.find(_TEXT("\\\\")))
+    current = 2;
+  else {
+    // Make sure the drive letter is upper case.
+    const TCHAR c = fullname[0];
+    if (!isalpha(c) || ':' != fullname[1] || '\\' != fullname[2]) {
+      current = 0;
+    } else {
+      if (islower(c))
+        fullname[0] = toupper(c);
+      current = 3;
+    }
   }
 
   // Copy the root directory to the output string
-  TSTRING longname(fullname, 3);
+  TSTRING longname(fullname, 0, current);
 
   // Start processing at the first path component
-  current = &fullname[3];
-  TCHAR *limit = &fullname[length];
-
   // Process until we reach the end of the full name
-  while (current < limit)
-  {
-    TCHAR *tail;
-
+  TSTRING::size_type len = fullname.length();
+  while (current < len) {
     // Find the next \, or the end of the string
-    (tail = _tcschr/*strchr*/(current, '\\')) || (tail = limit);
-    *tail = 0;
+    TSTRING::size_type pos = fullname.find('\\', current);
+    if (TSTRING::npos == pos)
+      pos = len;
 
     // Create a wildcard to search for the path
-    TSTRING wild = longname + current;
+    TSTRING wild = longname + fullname.substr(current, pos-current);
     WIN32_FIND_DATA finddata;
     HANDLE hFind = ::FindFirstFile(wild.c_str(), &finddata);
     if (hFind == INVALID_HANDLE_VALUE)
     {
       // If the component was not found then just copy the rest of the path to the
       // output buffer verbatim.
-      longname += current;
+      longname += fullname.substr(current);
       break;
     }
     ::FindClose(hFind);
@@ -352,11 +371,12 @@ string DiskFile::GetCanonicalPathname(string filename)
     // Copy the component found to the output
     longname += finddata.cFileName;
 
-    current = tail + 1;
-
-    // If we have not reached the end of the name, add a "\"
-    if (current < limit)
+    current = pos;
+    if (current < len) {
+      current += 1; // skip '\\'
+      // If we have not reached the end of the name, add a "\"
       longname += '\\';
+    }
   }
 
   return native_char_array_to_utf8_string(longname.c_str());
@@ -429,7 +449,7 @@ DiskFile::~DiskFile(void)
 
 // Create new file on disk and make sure that there is enough
 // space on disk for it.
-bool DiskFile::Create(string _filename, u64 _filesize, bool /* async */)
+bool DiskFile::Create(const string &_filename, u64 _filesize, bool /* async */)
 {
   assert(file == 0);
 
@@ -573,7 +593,7 @@ bool DiskFile::WriteAsync(aiocb_type& cb, u64 offset, const void *buffer, size_t
 
 // Open the file
 
-bool DiskFile::Open(string _filename, u64 _filesize, bool /* async */)
+bool DiskFile::Open(const string &_filename, u64 _filesize, bool /* async */)
 {
   assert(file == 0);
 
@@ -655,64 +675,43 @@ string DiskFile::GetCanonicalPathname(string filename)
     return filename;
 
   // Get the current directory
-  char curdir[1000];
-  if (0 == getcwd(curdir, sizeof(curdir)))
-  {
+  char *curdir = getcwd(NULL, 0);
+  if (NULL == curdir)
     return filename;
-  }
+
+  string fullpath_s(curdir);
+  free(curdir);
+  fullpath_s.push_back('/');
+  fullpath_s.append(filename);
 
 #if HAVE_REALPATH
-  if (!realpath(filename.c_str(), curdir))
-    return string();
-  return curdir;
+  char *fullpath = realpath(fullpath_s.c_str(), NULL);
+  if (NULL == fullpath)
+    return filename;
+  fullpath_s = fullpath;
+  free(fullpath);
+  return fullpath_s;
 #else
-  // Allocate a work buffer and copy the resulting full path into it.
-  char *work = new char[strlen(curdir) + filename.size() + 2];
-  strcpy(work, curdir);
-  if (work[strlen(work)-1] != '/')
-    strcat(work, "/");
-  strcat(work, filename.c_str());
-
-  char *in = work;
-  char *out = work;
-
-  while (*in)
-  {
-    if (*in == '/')
-    {
+  string fullpath;
+  for(const char *in = fullpath_s.c_str(); *in;) {
+    if (*in == '/') {
       if (in[1] == '.' && in[2] == '/')
-      {
-        // skip the input past /./
-        in += 2;
-      }
-      else if (in[1] == '.' && in[2] == '.' && in[3] == '/')
-      {
+        in += 2; // skip the input past /./
+      else if (in[1] == '.' && in[2] == '.' && in[3] == '/') {
         // backtrack the output if /../ was found on the input
         in += 3;
-        if (out > work)
-        {
+        if (!fullpath.empty())
           do
-          {
-            out--;
-          } while (out > work && *out != '/');
-        }
-      }
+            fullpath.erase(--fullpath.end());
+          while (!fullpath.empty() && *--fullpath.end() != '/');
+      } else if (in[1] == '/') // collapse "//" to "/"
+        in++;
       else
-      {
-        *out++ = *in++;
-      }
-    }
-    else
-    {
-      *out++ = *in++;
-    }
+        fullpath.push_back(*in++); // fullpath.push_back('/'), in++;
+    } else
+      fullpath.push_back(*in++);
   }
-  *out = 0;
-
-  string result = work;
-  delete [] work;
-
-  return result;
+  return fullpath;
 #endif
 }
 
@@ -814,12 +813,10 @@ list<string>* DiskFile::FindFiles(string path, string wildcard)
 
 bool DiskFile::Open(bool async)
 {
-  string _filename = filename;
-
-  return Open(_filename, async);
+  return Open(filename, async);
 }
 
-bool DiskFile::Open(string _filename, bool async)
+bool DiskFile::Open(const string &_filename, bool async)
 {
   return Open(_filename, GetFileSize(_filename), async);
 }
@@ -877,7 +874,7 @@ bool DiskFile::Delete(void)
 //  }
 //}
 
-void DiskFile::SplitFilename(string filename, string &path, string &name)
+void DiskFile::SplitFilename(const string &filename, string &path, string &name)
 {
   string::size_type where;
 
@@ -901,7 +898,7 @@ void DiskFile::SplitFilename(string filename, string &path, string &name)
   #include <sys/mount.h>
 #endif
 
-bool DiskFile::FileExists(string filename)
+bool DiskFile::FileExists(const string &filename)
 {
   struct_stat st;
 #if SUPPORT_BLOCK_DEVICES
@@ -912,7 +909,7 @@ bool DiskFile::FileExists(string filename)
 #endif
 }
 
-u64 DiskFile::GetFileSize(string filename)
+u64 DiskFile::GetFileSize(const string &filename)
 {
   struct_stat st;
   if (0 == stat(utf8_string_to_native_char_array(filename), &st)) {
@@ -942,11 +939,11 @@ u64 DiskFile::GetFileSize(string filename)
 
 // Take a filename from a PAR2 file and replace any characters
 // which would be illegal for a file on disk
-string DiskFile::TranslateFilename(string filename)
+string DiskFile::TranslateFilename(const string &filename)
 {
   string result;
 
-  string::iterator p = filename.begin();
+  string::const_iterator p = filename.begin();
   while (p != filename.end())
   {
     unsigned char ch = *p;
@@ -1014,26 +1011,26 @@ string DiskFile::TranslateFilename(string filename)
 
 bool DiskFile::Rename(void)
 {
-  char newname[_MAX_PATH+1];
   u32 index = 0;
-
   struct_stat st;
-
-  do
-  {
-    int length = snprintf(newname, _MAX_PATH, "%s.%u", filename.c_str(), ++index);
-    if (length < 0)
-    {
+  string newname;
+  do {
+    char number[16];
+    int length = snprintf(number, sizeof(number)-1, "%u", ++index);
+    if (length < 0) {
       cerr << filename << " cannot be renamed." << endl;
       return false;
     }
-    newname[length] = 0;
-  } while (stat(utf8_char_array_to_native_char_array(newname), &st) == 0);
+
+    newname.assign(filename);
+    newname.push_back('.');
+    newname.append(number);
+  } while (stat(utf8_char_array_to_native_char_array(newname.c_str()), &st) == 0);
 
   return Rename(newname);
 }
 
-bool DiskFile::Rename(string _filename)
+bool DiskFile::Rename(const string &_filename)
 {
 #ifdef WIN32
   assert(hFile == INVALID_HANDLE_VALUE);
@@ -1100,7 +1097,7 @@ DiskFileMap::~DiskFileMap(void)
 
 bool DiskFileMap::Insert(DiskFile *diskfile)
 {
-  string filename = diskfile->FileName();
+  const string &filename = diskfile->FileName();
   assert(filename.length() != 0);
 
   pair<map<string,DiskFile*>::const_iterator,bool> location = diskfilemap.insert(pair<string,DiskFile*>(filename, diskfile));
@@ -1110,7 +1107,7 @@ bool DiskFileMap::Insert(DiskFile *diskfile)
 
 void DiskFileMap::Remove(DiskFile *diskfile)
 {
-  string filename = diskfile->FileName();
+  const string &filename = diskfile->FileName();
   assert(filename.length() != 0);
 
   diskfilemap.erase(filename);

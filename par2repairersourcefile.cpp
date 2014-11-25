@@ -97,7 +97,7 @@ void Par2RepairerSourceFile::SetVerificationPacket(VerificationPacket *_verifica
   verificationpacket = _verificationpacket;
 }
 
-void Par2RepairerSourceFile::ComputeTargetFileName(string path) // path is the directory of the par2 file
+void Par2RepairerSourceFile::ComputeTargetFileName(const string &path) // path is the directory of the par2 file
 {
   // Get a version of the filename compatible with the OS
   string filename = DiskFile::TranslateFilename(descriptionpacket->FileName());
@@ -131,7 +131,7 @@ void Par2RepairerSourceFile::ComputeTargetFileName(string path) // path is the d
   }
 }
 
-string Par2RepairerSourceFile::TargetFileName(void) const
+const string &Par2RepairerSourceFile::TargetFileName(void) const
 {
   return targetfilename;
 }

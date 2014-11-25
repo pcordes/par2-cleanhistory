@@ -36,7 +36,7 @@ public:
   ~DiskFile(void);
 
   // Create a file and set its length
-  bool Create(string filename, u64 filesize, bool async = false);
+  bool Create(const string &filename, u64 filesize, bool async = false);
 
   // Write some data to the file
   bool Write(u64 offset, const void *buffer, size_t length);
@@ -48,8 +48,8 @@ public:
 
   // Open the file
   bool Open(bool async = false);
-  bool Open(string filename, bool async = false);
-  bool Open(string filename, u64 filesize, bool async = false);
+  bool Open(const string &filename, bool async = false);
+  bool Open(const string &filename, u64 filesize, bool async = false);
 
   // Check to see if the file is open
 #ifdef WIN32
@@ -68,14 +68,14 @@ public:
   u64 FileSize(void) const {return filesize;}
 
   // Get the name of the file
-  string FileName(void) const {return filename;}
+  const string &FileName(void) const { return filename; }
 
   // Does the file exist
   bool Exists(void) const {return exists;}
 
   // Rename the file
   bool Rename(void); // Pick a filename automatically
-  bool Rename(string filename);
+  bool Rename(const string &filename);
 
   // Delete the file
   bool Delete(void);
@@ -86,11 +86,11 @@ public:
 public:
   static string GetCanonicalPathname(string filename);
 
-  static void SplitFilename(string filename, string &path, string &name);
-  static string TranslateFilename(string filename);
+  static void SplitFilename(const string &filename, string &path, string &name);
+  static string TranslateFilename(const string &filename);
 
-  static bool FileExists(string filename);
-  static u64 GetFileSize(string filename);
+  static bool FileExists(const string &filename);
+  static u64 GetFileSize(const string &filename);
 
   // Search the specified path for files which match the specified wildcard
   // and return their names in a list.

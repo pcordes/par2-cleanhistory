@@ -3,7 +3,7 @@
 ##
 ##  Copyright (c) 2003 Peter Brian Clements
 ##  Modifications for specific OS support (Mac, Linux, FreeBSD), and x86/x86_64
-##  assembly code building (c) 2008 Vincent Tan.
+##  assembly code building (c) 2008-2014 Vincent Tan.
 ##
 ##  par2cmdline is free software; you can redistribute it and/or modify
 ##  it under the terms of the GNU General Public License as published by
@@ -113,7 +113,7 @@ par2_SOURCES = par2cmdline.cpp par2cmdline.h \
 
 LDADD = -lstdc++ -ltbb -L.
 if PLATFORM_DARWIN
-AM_CXXFLAGS = -Wall -I$(top_srcdir)/../tbb22_20090809oss_src/include -gfull -O3 -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS_DARWIN) $(AM_CXXFLAGS_GPGPU) $(FLAGS_ARCH)
+AM_CXXFLAGS = -Wall -I$(top_srcdir)/../tbb43_20141023oss/include -gfull -O3 -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS_DARWIN) $(AM_CXXFLAGS_GPGPU) $(FLAGS_ARCH) $(PAR2_CXXFLAGS)
 if AMD64
 AM_CXXFLAGS += -mmacosx-version-min=10.5 -isysroot /Developer/SDKs/MacOSX10.5.sdk
 AM_LDFLAGS = -mmacosx-version-min=10.5
@@ -123,9 +123,8 @@ if GPGPU_CUDA    # CUDA mandates 10.5 so the two are mutally exclusive: either C
 AM_CXXFLAGS += -mmacosx-version-min=10.5 -isysroot /Developer/SDKs/MacOSX10.5.sdk
 AM_LDFLAGS = -mmacosx-version-min=10.5 $(AM_LDFLAGS_GPGPU)
 else
-# because MacOSX10.4u.sdk requires g++ 4.0, you must invoke configure with: CXX=g++-4.0
-AM_CXXFLAGS += -mmacosx-version-min=10.4 -isysroot /Developer/SDKs/MacOSX10.4u.sdk
-AM_LDFLAGS = -mmacosx-version-min=10.4
+AM_CXXFLAGS += -mmacosx-version-min=10.5 -isysroot /Developer/SDKs/MacOSX10.5.sdk
+AM_LDFLAGS = -mmacosx-version-min=10.5
 endif
 endif
 if PPC32
@@ -136,17 +135,17 @@ endif
 endif
 
 if PLATFORM_FREEBSD
-AM_CXXFLAGS = -Wall -I/usr/local/include $(AM_CXXFLAGS_GPGPU) $(FLAGS_ARCH)
+AM_CXXFLAGS = -Wall -I/usr/local/include $(AM_CXXFLAGS_GPGPU) $(FLAGS_ARCH) $(PAR2_CXXFLAGS)
 AM_CCASFLAGS = -Wa,-I$(top_srcdir)
 AM_LDFLAGS = -L/usr/local/lib $(AM_LDFLAGS_GPGPU)
 endif
 if PLATFORM_LINUX
-AM_CXXFLAGS = -Wall -I$(top_srcdir)/../tbb22_20090809oss/include $(AM_CXXFLAGS_GPGPU) $(FLAGS_ARCH)
+AM_CXXFLAGS = -Wall -I$(top_srcdir)/../tbb43_20141023oss/include $(AM_CXXFLAGS_GPGPU) $(FLAGS_ARCH) $(PAR2_CXXFLAGS)
 AM_CCASFLAGS = -Wa,-I$(top_srcdir)
 AM_LDFLAGS = '-Wl,-R,$$ORIGIN' $(AM_LDFLAGS_GPGPU)
 endif
 
-EXTRA_DIST = PORTING ROADMAP par2cmdline.sln par2cmdline.vcproj \
+EXTRA_DIST = Makefile PORTING README_FIRST.txt ROADMAP par2cmdline.sln par2cmdline.vcxproj par2cmdline.vcxproj.filters \
 	testdata.tar.gz pretest test1 test2 test3 test4 test5 test6 \
 	posttest \
 	detect-mmx.s \

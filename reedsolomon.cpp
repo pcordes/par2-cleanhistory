@@ -370,7 +370,7 @@ template <> bool ReedSolomon<Galois16>::SetInput(u32 count)
 
   #elif defined(_MSC_VER) // Visual C++ compiler
 
-    #if defined(WIN64)
+    #if defined(_M_X64)
       #include <emmintrin.h>
       typedef __m128i          mm_reg_type;
       #define mm_xor           _mm_xor_si128
@@ -618,7 +618,7 @@ template <> bool ReedSolomon<Galois16>::InternalProcess(
   #elif __GNUC__ &&  __i386__
       rs_process_i686_mmx(outputbuffer, inputbuffer, vsz, lhTable);
     //rs_process_i686_sse2(outputbuffer, inputbuffer, vsz, lhTable);
-  #elif defined(WIN64) || defined(WIN32)
+  #elif defined(WIN32)
       rs_process_simd(outputbuffer, inputbuffer, vsz, lhTable);
   #else
       vsz = 0; // no SIMD unit, so set vsz = 0

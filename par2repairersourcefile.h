@@ -77,8 +77,8 @@ public:
   DiskFile* GetCompleteFile(void) const;
 
   // Compute/Get the filename for the final repaired version of the file
-  void ComputeTargetFileName(string path);
-  string TargetFileName(void) const;
+  void ComputeTargetFileName(const string &path);
+  const string &TargetFileName(void) const;
 
   // Get the number of blocks that the file uses
   u32 BlockCount(void) const {return blockcount;}

@@ -18,7 +18,7 @@
 //  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 //
 //  Modifications for concurrent processing, Unicode support, and hierarchial
-//  directory support are Copyright (c) 2007-2009 Vincent Tan.
+//  directory support are Copyright (c) 2007-2014 Vincent Tan.
 //  Search for "#if WANT_CONCURRENT" for concurrent code.
 //  Concurrent processing utilises Intel Thread Building Blocks 2.0,
 //  Copyright (c) 2007 Intel Corp.
@@ -40,17 +40,17 @@ void banner(void)
   cout << version << ", Copyright (C) 2003 Peter Brian Clements." << endl
 #if WANT_CONCURRENT
        << "Modifications for concurrent processing, Unicode support, and hierarchial" << endl
-       << "directory support are Copyright (c) 2007-2009 Vincent Tan." << endl
-       << "Concurrent processing utilises Intel Thread Building Blocks 2.0," << endl
-       << "Copyright (c) 2007-2008 Intel Corp." << endl
-  #if __x86_64__ || defined(WIN64)
-       << "Executing using the 64-bit x86 (AMD64) instruction set." << endl
-  #elif __i386__ || defined(WIN32)
-       << "Executing using the 32-bit x86 (IA32) instruction set." << endl
-  #elif __ppc64__
-       << "Executing using the 64-bit PowerPC (PPC64) instruction set." << endl
-  #elif __ppc__
-       << "Executing using the 32-bit PowerPC (PPC32) instruction set." << endl
+       << "directory support are Copyright (c) 2007-2014 Vincent Tan." << endl
+       << "Concurrent processing utilises Intel Thread Building Blocks 4.3 Update 1," << endl
+       << "Copyright (c) 2007-2014 Intel Corp." << endl
+  #if __x86_64__ || defined(_M_X64)
+       << "Executing using the x64 (64-bit) instruction set." << endl
+  #elif __i386__ || defined(_M_IX86)
+       << "Executing using the x86 (32-bit) instruction set." << endl
+//#elif __ppc64__
+//     << "Executing using the 64-bit PowerPC (PPC64) instruction set." << endl
+//#elif __ppc__
+//     << "Executing using the 32-bit PowerPC (PPC32) instruction set." << endl
 //#elif __alpha__
 //     << "Executing using the 32-bit Alpha (ALPHA) instruction set." << endl
 //#elif __mips__
@@ -85,7 +85,7 @@ int main(int argc, char *argv[])
 #endif
 
   // Parse the command line
-  std::auto_ptr<CommandLine> commandline(new CommandLine);
+  std_auto_ptr<CommandLine> commandline(new CommandLine);
 
   Result result = eInvalidCommandLineArguments;
   

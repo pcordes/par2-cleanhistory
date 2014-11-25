@@ -88,7 +88,7 @@
       assert(!diskfile->FileName().empty());
       (bool) _diskfilemap.erase(diskfile->FileName());
     }
-    DiskFile* Find(string filename) const {
+    DiskFile* Find(const string &filename) const {
       assert(!filename.empty());
       map_type::const_accessor  a;
       return _diskfilemap.find(a, filename) ?  a->second : NULL;
@@ -115,16 +115,20 @@ protected:
 #if WANT_CONCURRENT
 public:
   #if WANT_CONCURRENT_SOURCE_VERIFICATION
-  void VerifyOneSourceFile(Par2RepairerSourceFile *sourcefile, bool& finalresult);
+  // 2014/10/25 this method replaces VerifyOneSourceFile():
+  // either sourcefile is non-NULL or extraFile is non-NULL but both cannot be NULL or non-NULL
+  void VerifyOneSourceOrExtraFile(Par2RepairerSourceFile *sourcefile,
+                                  const CommandLine::ExtraFile* extraFile, bool& finalresult);
+//void VerifyOneSourceFile(Par2RepairerSourceFile *sourcefile, bool& finalresult);
   #endif
   void ProcessDataForOutputIndex(u32 outputstartindex, u32 outputendindex, size_t blocklength,
                                  u32 inputindex, buffer& inputbuffer);
   void ProcessDataConcurrently(size_t blocklength, u32 inputindex, buffer& inputbuffer);
 #endif
   // Load packets from the specified file
-  bool LoadPacketsFromFile(string filename);
+  bool LoadPacketsFromFile(const string &filename);
 #if WANT_CONCURRENT
-protected:
+private:
   void* OutputBufferAt(u32 outputindex);
   bool ProcessDataForOutputIndex_(u32 outputindex, u32 outputendindex, size_t blocklength,
                                   u32 inputindex, buffer& inputbuffer);
@@ -216,7 +220,25 @@ protected:
   // Delete all of the partly reconstructed files
   bool DeleteIncompleteTargetFiles(void);
 
-protected:
+  FileCheckSummer* RemoveFileCheckSummerFromPool(void);
+  void InsertFileCheckSummerIntoPool(FileCheckSummer* fcs);
+
+private:
+  class StFileCheckSummer {
+  public:
+    StFileCheckSummer(Par2Repairer* owner, FileCheckSummer* fcs) : owner_(owner), fcs_(fcs) {}
+
+    ~StFileCheckSummer(void) { owner_->InsertFileCheckSummerIntoPool(fcs_); }
+
+    operator FileCheckSummer*(void) const { return fcs_; }
+    FileCheckSummer*    operator->(void) const { return fcs_; }
+
+  private:
+    Par2Repairer*    owner_;
+    FileCheckSummer* fcs_;
+  };
+  friend class StFileCheckSummer; // InsertFileCheckSummerIntoPool()
+
   CommandLine::NoiseLevel   noiselevel;              // OnScreen display
 
   string                    searchpath;              // Where to find files on disk
@@ -253,6 +275,21 @@ protected:
 
   u32                       windowtable[256];        // Table for sliding CRCs
   u32                       windowmask;              // Maks for sliding CRCs
+
+  // 2014/10/25 when verifying a large set of data files on the 32-bit
+  // Windows par2.exe, the heap becomes fragmented causing the memory
+  // allocation for buffer in the original ctor to fail. To fix this,
+  // the Par2Repairer class now instantiates a pool of FileCheckSummer
+  // instances and re-uses these instances for each file it verifies.
+#if WANT_CONCURRENT_SOURCE_VERIFICATION
+  typedef ::atomic_ptr<FileCheckSummer*> FileCheckSummerPtr;
+#else
+  typedef FileCheckSummer*  FileCheckSummerPtr;
+#endif
+  vector<FileCheckSummerPtr> filechecksummers;        // owned, allocated and deallocated by this class
+#if !defined(NDEBUG) && 0
+  tbb::atomic<int>           filechecksummers_available;
+#endif
 
   bool                            blockverifiable;         // Whether and files can be verified at the block level
   VerificationHashTable           verificationhashtable;   // Hash table for block verification
@@ -303,7 +340,7 @@ protected:
   u64                       totaldata;               // Total amount of data to be processed.
 
 #if WANT_CONCURRENT
-  unsigned                  concurrent_processing_level;
+  concurrency_processing_t  concurrent_processing_level;
   tbb::mutex                cout_mutex;
   tbb::atomic<u32>          cout_in_use;             // when repairing, this is used to display % done w/o blocking a thread
   tbb::tick_count           last_cout;   // when cout was used for output

@@ -54,7 +54,13 @@ public:
 
   // Recover the file description and file verification packets
   // in the critical packet list.
+#if WANT_CONCURRENT
+  // 2014/11/25 this version is thread safe (criticalpackets will not be corrupted by multiple threads)
+  void RecordCriticalPackets(tbb::concurrent_vector<CriticalPacket*> &criticalpackets);
+#else
+  // 2014/11/25 this version is not thread safe
   void RecordCriticalPackets(list<CriticalPacket*> &criticalpackets);
+#endif
 
   // Get the file id
   const MD5Hash& FileId(void) const;

@@ -53,7 +53,7 @@ public:
   void ProcessDataForOutputIndex(u32 outputstartindex, u32 outputendindex, size_t blocklength, u32 inputblock, buffer& ib);
   void ProcessDataConcurrently(size_t blocklength, u32 inputblock, buffer& ib);
   #if WANT_CONCURRENT_PAR2_FILE_OPENING
-  Par2CreatorSourceFile* OpenSourceFile(const CommandLine::ExtraFile &extrafile);
+  Par2CreatorSourceFile* OpenSourceFile(const CommandLine::ExtraFile &extrafile, u32 extrafile_index);
   #endif
 protected:
   void* OutputBufferAt(u32 outputindex);
@@ -88,7 +88,7 @@ protected:
   bool CreateSourceBlocks(void);
 
   // Create all of the output files and allocate all packets to appropriate file offets.
-  bool InitialiseOutputFiles(string par2filename);
+  bool InitialiseOutputFiles(const string& par2filename);
 
   // Allocate memory buffers for reading and writing data to disk.
   bool AllocateBuffers(void);
@@ -116,6 +116,7 @@ protected:
 
 protected:
   CommandLine::NoiseLevel noiselevel; // How noisy we should be
+  u32 opening_message_limit; // zero for no limit; default is 200
 
   u64 blocksize;      // The size of each block.
   size_t chunksize;   // How much of each block will be processed at a 
@@ -150,7 +151,18 @@ protected:
   vector<DiskFile>           recoveryfiles;    // Array with one entry for every recovery file.
   vector<RecoveryPacket>     recoverypackets;  // Array with one entry for every recovery packet.
 
-  list<CriticalPacket*>      criticalpackets;  // A list of all of the critical packets.
+#if WANT_CONCURRENT
+  // 2014/11/25 bugfix: was not outputting main packet when a large number of files being
+  // being processed because the criticalpackets member was being corrupted by multiple threads.
+  // Fixed by using a thread-safe vector to contain the packets. Note: criticalpacketentries
+  // is not required to be thread safe because it's only operated on by the main thread.
+  // A concurrency safe vector of all of the critical packets:
+  typedef tbb::concurrent_vector<CriticalPacket*> CriticalPackets;
+#else
+  // A list of all of the critical packets:
+  typedef list<CriticalPacket*> CriticalPackets;
+#endif
+  CriticalPackets            criticalpackets;
   list<CriticalPacketEntry>  criticalpacketentries; // A list of which critical packet will
                                                     // be written to which recovery file.
 
@@ -192,7 +204,7 @@ protected:
                              // the recovery data is computed.
 
 #if WANT_CONCURRENT
-  unsigned                  concurrent_processing_level;
+  concurrency_processing_t  concurrent_processing_level;
   tbb::mutex                cout_mutex;
   tbb::atomic<u32>          cout_in_use; // this is used to display % done w/o blocking a thread
   tbb::tick_count           last_cout;   // when cout was used for output

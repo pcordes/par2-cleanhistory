@@ -230,7 +230,7 @@ static char THIS_FILE[]=__FILE__;
 #endif
 #endif
 
-#if defined(WIN64)
+#if defined(WIN32)
 namespace std {
   using ::memset;
 }
@@ -238,6 +238,7 @@ namespace std {
 
 Par2Creator::Par2Creator(void)
 : noiselevel(CommandLine::nlUnknown)
+, opening_message_limit(0)
 , blocksize(0)
 , chunksize(0)
 , outputbuffer(0)
@@ -261,7 +262,7 @@ Par2Creator::Par2Creator(void)
 , deferhashcomputation(false)
 
 #if WANT_CONCURRENT
-, concurrent_processing_level(ALL_CONCURRENT)
+, concurrent_processing_level(INVALID_CONCURRENCY_LEVEL) // ALL_CONCURRENT
 , last_cout(tbb::tick_count::now())
 #endif
 , create_dummy_par_files(false)
@@ -300,6 +301,7 @@ Result Par2Creator::Process(const CommandLine &commandline)
 {
   // Get information from commandline
   noiselevel = commandline.GetNoiseLevel();
+  opening_message_limit = commandline.GetOpeningMessageLimit();
   blocksize = commandline.GetBlockSize();
   sourceblockcount = commandline.GetBlockCount();
   const list<CommandLine::ExtraFile> &extrafiles = commandline.GetExtraFiles();
@@ -317,6 +319,17 @@ Result Par2Creator::Process(const CommandLine &commandline)
   concurrent_processing_level = commandline.GetConcurrentProcessingLevel();
   if (noiselevel > CommandLine::nlQuiet) {
     cout << "Processing ";
+  #if 1
+    assert(INVALID_CONCURRENCY_LEVEL != concurrent_processing_level);
+    assert(0 != GetMaxConcurrency(concurrent_processing_level));
+    assert(GetMaxConcurrency(concurrent_processing_level) <= (unsigned) tbb::task_scheduler_init::default_num_threads());
+    if (1 == GetMaxConcurrency(concurrent_processing_level))
+        cout << "checksums and Reed-Solomon data serially.";
+    else if (SERIAL_VERIFICATION_MASK & concurrent_processing_level)
+        cout << "checksums serially and Reed-Solomon data concurrently.";
+    else
+        cout << "checksums and Reed-Solomon data concurrently using up to " << GetMaxConcurrency(concurrent_processing_level) << " logical CPUs.";
+  #elif 0
     if (ALL_SERIAL == concurrent_processing_level)
       cout << "checksums and Reed-Solomon data serially.";
     else if (CHECKSUM_SERIALLY_BUT_PROCESS_CONCURRENTLY == concurrent_processing_level)
@@ -325,8 +338,14 @@ Result Par2Creator::Process(const CommandLine &commandline)
       cout << "checksums and Reed-Solomon data concurrently.";
     else
       return eLogicError;
+  #endif
     cout << endl;
   }
+
+  // 2014/11/25 to prevent heap fragmentation, reserve the correct number of entries in criticalpackets,
+  // which is twice the number of source files (each file produces a descriptionpacket and a
+  // verificationpacket) and the main packet and the creator packet.
+  criticalpackets.reserve(sourcefilecount * 2 + 2);
 #endif
   create_dummy_par_files = commandline.GetCreateDummyParFiles();
 
@@ -453,6 +472,14 @@ Result Par2Creator::Process(const CommandLine &commandline)
 // specified on the command line
 bool Par2Creator::ComputeBlockSizeAndBlockCount(const list<CommandLine::ExtraFile> &extrafiles)
 {
+  if (extrafiles.size() > 32767) // 2014/10/25
+  {
+    // too many source files
+
+    cerr << "There are too many source files (" << extrafiles.size() << "): the upper limit is 32767." << endl; // 2014/10/25
+    return false;
+  }
+
   // Determine blocksize from sourceblockcount or vice-versa
   if (blocksize > 0)
   {
@@ -465,7 +492,7 @@ bool Par2Creator::ComputeBlockSizeAndBlockCount(const list<CommandLine::ExtraFil
 
     if (count > 32768)
     {
-      cerr << "Block size is too small. It would require " << count << "blocks." << endl;
+      cerr << "Block size is too small. It would require " << count << " blocks." << endl;
       return false;
     }
 
@@ -737,43 +764,46 @@ bool Par2Creator::ComputeRecoveryFileCount(void)
 
 #if WANT_CONCURRENT_PAR2_FILE_OPENING
 
-Par2CreatorSourceFile* Par2Creator::OpenSourceFile(const CommandLine::ExtraFile &extrafile)
+Par2CreatorSourceFile* Par2Creator::OpenSourceFile(const CommandLine::ExtraFile &extrafile, u32 extrafile_index)
 {
-    std::auto_ptr<Par2CreatorSourceFile> sourcefile(new Par2CreatorSourceFile);
+  std_auto_ptr<Par2CreatorSourceFile> sourcefile(new Par2CreatorSourceFile);
 
-    if (noiselevel > CommandLine::nlSilent) {
-      string  name(utf8_string_to_cout_parameter(CommandLine::FileOrPathForCout(
-                   extrafile.FileName())));
+  // 2014/11/25 added restriction to generate output message only if source file's index <= opening_message_limit
+  // to stop messages causing a lot of scrolling and make processing a very large set of files take a long time.
+  if (noiselevel > CommandLine::nlSilent &&
+      (create_dummy_par_files || 0 == opening_message_limit || extrafile_index <= opening_message_limit)) {
+    const string  name(utf8_string_to_cout_parameter(CommandLine::FileOrPathForCout(
+                       extrafile.FileName())));
 
-      tbb::mutex::scoped_lock l(cout_mutex);
-      cout << "Opening: " << name;
-      if (create_dummy_par_files)
-        cout << "\r";
-      else
-        cout << endl;
-    }
+    tbb::mutex::scoped_lock l(cout_mutex);
+    cout << "Opening: " << name;
+    if (create_dummy_par_files)
+      cout << "\r";
+    else
+      cout << endl;
+  }
 
-    // Open the source file and compute its Hashes and CRCs.
-    if (!sourcefile->Open(noiselevel, extrafile, blocksize, deferhashcomputation, cout_mutex, last_cout)) {
-      string  name(utf8_string_to_cout_parameter(CommandLine::FileOrPathForCout(
-                   extrafile.FileName())));
+  // Open the source file and compute its Hashes and CRCs.
+  if (!sourcefile->Open(noiselevel, extrafile, blocksize, deferhashcomputation, cout_mutex, last_cout)) {
+    const string  name(utf8_string_to_cout_parameter(CommandLine::FileOrPathForCout(
+                       extrafile.FileName())));
 
-      tbb::mutex::scoped_lock l(cout_mutex);
-      cerr << "error: could not open '" << name << "'" << endl;
-      return NULL;
-    }
+    tbb::mutex::scoped_lock l(cout_mutex);
+    cerr << "error: could not open '" << name << "'" << endl;
+    return NULL;
+  }
 
-    // Record the file verification and file description packets
-    // in the critical packet list.
-    sourcefile->RecordCriticalPackets(criticalpackets);
+  // Record the file verification and file description packets
+  // in the critical packet list.
+  sourcefile->RecordCriticalPackets(criticalpackets);
 
-    // Add the source file to the sourcefiles array.
-    //sourcefiles.push_back(sourcefile);
+  // Add the source file to the sourcefiles array.
+  //sourcefiles.push_back(sourcefile);
 
-    // Close the source file until its needed
-    sourcefile->Close();
+  // Close the source file until its needed
+  sourcefile->Close();
 
-    return sourcefile.release();
+  return sourcefile.release();
 }
 
   #if 1
@@ -807,8 +837,8 @@ Par2CreatorSourceFile* Par2Creator::OpenSourceFile(const CommandLine::ExtraFile 
   protected:
     pipeline_state_open_source_file& state_;
   public:
-    filter_open_source_file(pipeline_state_open_source_file& s) :
-      tbb::filter(false /* tbb::filter::parallel */), state_(s) {}
+    filter_open_source_file(pipeline_state_open_source_file& state) :
+      tbb::filter(tbb::filter::parallel), state_(state) {}
     virtual void* operator()(void*);
   };
 
@@ -824,7 +854,7 @@ Par2CreatorSourceFile* Par2Creator::OpenSourceFile(const CommandLine::ExtraFile 
       return NULL; // done
     }
 
-    Par2CreatorSourceFile* sf = state_.delegate().OpenSourceFile(files[idx]);
+    Par2CreatorSourceFile* sf = state_.delegate().OpenSourceFile(files[idx], idx);
     if (!sf)
       state_.set_not_ok();
     else
@@ -871,7 +901,12 @@ Par2CreatorSourceFile* Par2Creator::OpenSourceFile(const CommandLine::ExtraFile 
 bool Par2Creator::OpenSourceFiles(const list<CommandLine::ExtraFile> &extrafiles)
 {
 #if WANT_CONCURRENT_PAR2_FILE_OPENING
-  if (ALL_CONCURRENT == concurrent_processing_level) {
+  #if 1
+  if (0 == (SERIAL_VERIFICATION_MASK & concurrent_processing_level))
+  #elif 0
+  if (ALL_CONCURRENT == concurrent_processing_level)
+  #endif
+  {
     std::vector<CommandLine::ExtraFile> v;
     std::copy(extrafiles.begin(), extrafiles.end(), std::back_inserter(v));
 
@@ -881,7 +916,11 @@ bool Par2Creator::OpenSourceFiles(const list<CommandLine::ExtraFile> &extrafiles
     tbb::pipeline                                  p;
     filter_open_source_file                        fosf(s);
     p.add_filter(fosf);
+    #if 1
+    p.run(GetMaxConcurrency(concurrent_processing_level));
+    #elif 0
     p.run(tbb::task_scheduler_init::default_num_threads());
+    #endif
     bool                                           ok = s.is_ok();
   #else
     tbb::parallel_for(tbb::blocked_range<size_t>(0, v.size()), ::ApplyOpenSourceFile(this, v, res, ok));
@@ -889,11 +928,14 @@ bool Par2Creator::OpenSourceFiles(const list<CommandLine::ExtraFile> &extrafiles
     if (!ok)
       return false;
     std::copy(res.begin(), res.end(), std::back_inserter(sourcefiles));
-  } else for (ExtraFileIterator extrafile = extrafiles.begin(); extrafile != extrafiles.end(); ++extrafile) {
-    Par2CreatorSourceFile* sourcefile = OpenSourceFile(*extrafile);
-    if (!sourcefile)
-      return false;
-    sourcefiles.push_back(sourcefile);
+  } else {
+    u32 i = 0;
+    for (ExtraFileIterator extrafile = extrafiles.begin(); extrafile != extrafiles.end(); ++extrafile, ++i) {
+      Par2CreatorSourceFile* sourcefile = OpenSourceFile(*extrafile, i);
+      if (!sourcefile)
+        return false;
+      sourcefiles.push_back(sourcefile);
+    }
   }
 #else
   ExtraFileIterator extrafile = extrafiles.begin();
@@ -994,7 +1036,7 @@ public:
 };
 
 // Create all of the output files and allocate all packets to appropriate file offets.
-bool Par2Creator::InitialiseOutputFiles(string par2filename)
+bool Par2Creator::InitialiseOutputFiles(const string& par2filename)
 {
   // Allocate the recovery packets
   recoverypackets.resize(recoveryblockcount);
@@ -1171,10 +1213,23 @@ bool Par2Creator::InitialiseOutputFiles(string par2filename)
         if (count == 0)
         {
           // Write one set of critical packets
-          list<CriticalPacket*>::const_iterator nextCriticalPacket = criticalpackets.begin();
+          CriticalPackets::const_iterator nextCriticalPacket = criticalpackets.begin();
 
           while (nextCriticalPacket != criticalpackets.end())
           {
+#if !defined(NDEBUG) && 0
+{
+class PublicCriticalPacket {
+public:
+  u8     *packetdata;
+  size_t  packetlength;
+};
+const PublicCriticalPacket* pcp = (const PublicCriticalPacket*)(*nextCriticalPacket);
+std::cout << "InitialiseOutputFiles()1 is adding packet of size " << pcp->packetlength <<
+" type " << std::string((const char*) (((const PACKET_HEADER*) pcp->packetdata)->type.type+8)).substr(0, 8) <<
+" offset " << offset << " into file " << fileallocation->filename << std::endl;
+}
+#endif
             criticalpacketentries.push_back(CriticalPacketEntry(&*recoveryfile, 
                                                                 offset, 
                                                                 *nextCriticalPacket));
@@ -1194,7 +1249,7 @@ bool Par2Creator::InitialiseOutputFiles(string par2filename)
 
           // Get ready to iterate through the critical packets
           u32 packetCount = 0;
-          list<CriticalPacket*>::const_iterator nextCriticalPacket = criticalpackets.end();
+          CriticalPackets::const_iterator nextCriticalPacket = criticalpackets.end();
 
           // What is the first exponent
           u32 exponent = fileallocation->exponent;
@@ -1211,10 +1266,23 @@ bool Par2Creator::InitialiseOutputFiles(string par2filename)
             ++exponent;
 
             // Add some critical packets
-            packetCount += copies * criticalpackets.size();
+            packetCount += copies * (u32) criticalpackets.size();
             while (packetCount >= count)
             {
               if (nextCriticalPacket == criticalpackets.end()) nextCriticalPacket = criticalpackets.begin();
+#if !defined(NDEBUG) && 0
+{
+class PublicCriticalPacket {
+public:
+  u8     *packetdata;
+  size_t  packetlength;
+};
+const PublicCriticalPacket* pcp = (const PublicCriticalPacket*)(*nextCriticalPacket);
+std::cout << "InitialiseOutputFiles()2 is adding packet of size " << pcp->packetlength <<
+" type " << std::string((const char*)(((const PACKET_HEADER*)pcp->packetdata)->type.type + 8)).substr(0, 8) <<
+" offset " << offset << " into file " << fileallocation->filename << std::endl;
+}
+#endif
               criticalpacketentries.push_back(CriticalPacketEntry(&*recoveryfile, 
                                                                   offset,
                                                                   *nextCriticalPacket));
@@ -1358,7 +1426,7 @@ bool Par2Creator::ProcessDataForOutputIndex_(u32 outputblock, u32 outputendblock
 //        tbb::mutex::scoped_lock l(cout_mutex);
           if (0 == cout_in_use.compare_and_swap(outputendblock, 0)) { // <= this version doesn't block - only need 1 thread to write to cout
             last_cout = now;
-#ifndef NDEBUG
+#if !defined(NDEBUG) && GPGPU_CUDA
             cout << "GPU=" << cuda::GetProcessingCount() << " - " << "Processing: " << newfraction/10 << '.' << newfraction%10 << "%\r" << flush;
 #else
             cout << "Processing: " << newfraction/10 << '.' << newfraction%10 << "%\r" << flush;
@@ -1412,7 +1480,12 @@ private:
 
 void Par2Creator::ProcessDataConcurrently(size_t blocklength, u32 inputblock, buffer& inputbuffer)
 {
+  #if 1
+  if (1 < GetMaxConcurrency(concurrent_processing_level))
+  #elif 0
   if (ALL_SERIAL != concurrent_processing_level) {
+  #endif
+  {
     static tbb::affinity_partitioner ap;
     tbb::parallel_for(tbb::blocked_range<u32>(0, recoveryblockcount),
       ::ApplyPar2CreatorRSProcess(this, blocklength, inputblock, inputbuffer), ap);
@@ -1445,7 +1518,11 @@ bool Par2Creator::ProcessData(u64 blockoffset, size_t blocklength)
     for (size_t i = 0; i != sourceblockcount; ++i)
       sourceblocks_[i] = &sourceblocks[i];
 
+  #if 1
+    const size_t max_tokens = GetMaxConcurrency(concurrent_processing_level);
+  #elif 0
     const size_t max_tokens = ALL_SERIAL == concurrent_processing_level ? 1 : tbb::task_scheduler_init::default_num_threads();
+  #endif
     create_pipeline_state s(max_tokens, chunksize, recoveryblockcount, blocklength, blockoffset,
                             sourceblocks_, sourcefiles, deferhashcomputation);
 
@@ -1664,7 +1741,7 @@ bool Par2Creator::FinishCriticalPackets(void)
   // Get the setid from the main packet
   const MD5Hash &setid = mainpacket->SetId();
 
-  for (list<CriticalPacket*>::iterator criticalpacket=criticalpackets.begin(); 
+  for (CriticalPackets::iterator criticalpacket = criticalpackets.begin();
        criticalpacket!=criticalpackets.end(); 
        criticalpacket++)
   {

@@ -92,7 +92,7 @@ public:
 
     ExtraFile(const string &name, u64 size);
 
-    string FileName(void) const {return filename;}
+    const string &FileName(void) const {return filename;}
     u64 FileSize(void) const {return filesize;}
 
   protected:
@@ -116,12 +116,13 @@ public:
   u64                    GetLargestSourceSize(void) const  {return largestsourcesize;}
   u64                    GetTotalSourceSize(void) const    {return totalsourcesize;}
   CommandLine::NoiseLevel GetNoiseLevel(void) const        {return noiselevel;}
+  u32                    GetOpeningMessageLimit(void) const{return opening_message_limit;}
 
   // 2007/10/21 for hierarchial support:
   const string&          GetBaseDirectory(void) const      {return base_directory;}
 
 #if WANT_CONCURRENT
-  unsigned               GetConcurrentProcessingLevel(void) const { return concurrent_processing_level; }
+  concurrency_processing_t GetConcurrentProcessingLevel(void) const { return concurrent_processing_level; }
 #endif
 
   bool                   GetCreateDummyParFiles(void) const { return create_dummy_par_files; }
@@ -134,6 +135,7 @@ protected:
   Version version;             // What version files will be processed.
 
   NoiseLevel noiselevel;       // How much display output should there be.
+  u32 opening_message_limit;   // How many "Opening:" messages to display on creation; default is 200; 0 for no limit
 
   u32 blockcount;              // How many blocks the source files should 
                                // be virtually split into.
@@ -181,10 +183,15 @@ protected:
   string base_directory;
 
 #if WANT_CONCURRENT
+  #if 1
+  // see definition of concurrency_processing_t for details
+  concurrency_processing_t concurrent_processing_level; // 2014/10/07
+  #elif 0
   // although it is possible to specify how many threads that TBB should
   // use, that functionality is not implemented (and the TBB documentation
   // recommends not using it in production code), so this is merely a bool:
   unsigned concurrent_processing_level; // whether to process serially or concurrently
+  #endif
 #endif
   bool create_dummy_par_files; // so that final par2 size can be determined
 };

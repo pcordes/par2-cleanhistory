@@ -36,14 +36,25 @@
 class FileCheckSummer
 {
 public:
-  FileCheckSummer(DiskFile   *diskfile,
-                  u64         blocksize,
+  // 2014/10/25 when verifying a large set of data files on the 32-bit
+  // Windows par2.exe, the heap becomes fragmented causing the memory
+  // allocation for buffer in the original ctor to fail. To fix this,
+  // the Par2Repairer class now instantiates FileCheckSummer ONCE and
+  // re-uses this instance for each file it verifies. It can do this
+  // because the blocksize, windowtable and windowmask parameters are
+  // always the same values in the original version.
+  FileCheckSummer(u64         blocksize,
                   const u32 (&windowtable)[256],
                   u32         windowmask);
+//FileCheckSummer(DiskFile   *diskfile,
+//                u64         blocksize,
+//                const u32 (&windowtable)[256],
+//                u32         windowmask);
   ~FileCheckSummer(void);
 
   // Start reading the file at the beginning
-  bool Start(void);
+  bool Start(DiskFile *diskfile); // 2014/10/25 see above comment
+//bool Start(void);
 
   // Jump ahead the specified distance
   bool Jump(u64 distance);
@@ -55,11 +66,11 @@ public:
   u32 Checksum(void) const;
 
   // Compute and return the current hash
-  MD5Hash Hash(void);
+  MD5Hash Hash(void) const; // 2014/10/25 method is now const
 
   // Compute short values of checksum and hash
-  u32 ShortChecksum(u64 blocklength);
-  MD5Hash ShortHash(u64 blocklength);
+  u32 ShortChecksum(u64 blocklength) const; // 2014/10/25 method is now const
+  MD5Hash ShortHash(u64 blocklength) const; // 2014/10/25 method is now const
 
   // Do we have less than a full block of data
   bool ShortBlock(void) const;
@@ -75,7 +86,7 @@ public:
   const DiskFile* GetDiskFile(void) const {return diskfile;}
 
 protected:
-  DiskFile   *diskfile;
+  DiskFile   *diskfile; // referenced by instance but does not own, allocate or deallocate
   u64         blocksize;
   const u32 (&windowtable)[256];
   u32         windowmask;

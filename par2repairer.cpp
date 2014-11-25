@@ -136,17 +136,24 @@ static char THIS_FILE[]=__FILE__;
 
 Par2Repairer::Par2Repairer(void)
 {
+  noiselevel = CommandLine::nlNormal;
+
   firstpacket = true;
-  mainpacket = 0;
-  creatorpacket = 0;
+  mainpacket = NULL;
+  creatorpacket = NULL;
 
   blocksize = 0;
+//chunksize = 0; ???
   sourceblockcount = 0;
+  availableblockcount = 0;
+  missingblockcount = 0;
 
   blocksallocated = false;
 
-  availableblockcount = 0;
-  missingblockcount = 0;
+//windowmask = 0; ???
+//filechecksummer = NULL; cannot be allocated yet (needs windowtable)
+
+//blockverifiable = false; ???
 
   completefilecount = 0;
   renamedfilecount = 0;
@@ -159,10 +166,10 @@ Par2Repairer::Par2Repairer(void)
 #endif
   outputbuffer = NULL;
 
-  noiselevel = CommandLine::nlNormal;
+//totaldata = 0; ???
 
 #if WANT_CONCURRENT
-  concurrent_processing_level = ALL_CONCURRENT;
+  concurrent_processing_level = INVALID_CONCURRENCY_LEVEL; // ALL_CONCURRENT;
   cout_in_use = 0;
   last_cout = tbb::tick_count::now();
 #endif
@@ -205,6 +212,11 @@ Par2Repairer::~Par2Repairer(void)
 
   delete mainpacket;
   delete creatorpacket;
+
+  // 2014/10/25
+  for (vector<FileCheckSummerPtr>::const_iterator it = filechecksummers.begin();
+      it != filechecksummers.end(); ++it)
+    delete *it;
 }
 
 Result Par2Repairer::Process(const CommandLine &commandline, bool dorepair)
@@ -218,6 +230,17 @@ Result Par2Repairer::Process(const CommandLine &commandline, bool dorepair)
   concurrent_processing_level = commandline.GetConcurrentProcessingLevel();
   if (noiselevel > CommandLine::nlQuiet) {
     cout << "Processing ";
+  #if 1
+    assert(INVALID_CONCURRENCY_LEVEL != concurrent_processing_level);
+    assert(0 != GetMaxConcurrency(concurrent_processing_level));
+    assert(GetMaxConcurrency(concurrent_processing_level) <= (unsigned) tbb::task_scheduler_init::default_num_threads());
+    if (1 == GetMaxConcurrency(concurrent_processing_level))
+        cout << "verifications and repairs serially.";
+    else if (SERIAL_VERIFICATION_MASK & concurrent_processing_level)
+        cout << "verifications serially and repairs concurrently.";
+    else
+        cout << "verifications and repairs concurrently using up to " << GetMaxConcurrency(concurrent_processing_level) << " logical CPUs.";
+  #elif 0
     if (ALL_SERIAL == concurrent_processing_level)
       cout << "verifications and repairs serially.";
     else if (CHECKSUM_SERIALLY_BUT_PROCESS_CONCURRENTLY == concurrent_processing_level)
@@ -226,6 +249,7 @@ Result Par2Repairer::Process(const CommandLine &commandline, bool dorepair)
       cout << "verifications and repairs concurrently.";
     else
       return eLogicError;
+  #endif
     cout << endl;
   }
 #endif
@@ -419,7 +443,7 @@ Result Par2Repairer::Process(const CommandLine &commandline, bool dorepair)
 }
 
 // Load the packets from the specified file
-bool Par2Repairer::LoadPacketsFromFile(string filename)
+bool Par2Repairer::LoadPacketsFromFile(const string &filename)
 {
   // Skip the file if it has already been processed
   if (diskFileMap.Find(filename) != 0)
@@ -439,7 +463,7 @@ bool Par2Repairer::LoadPacketsFromFile(string filename)
   }
 
   if (noiselevel > CommandLine::nlSilent) {
-    string  name(utf8_string_to_cout_parameter(CommandLine::FileOrPathForCout(filename)));
+    const string  name(utf8_string_to_cout_parameter(CommandLine::FileOrPathForCout(filename)));
 #if WANT_CONCURRENT
     tbb::mutex::scoped_lock l(cout_mutex);
 #endif
@@ -889,44 +913,67 @@ bool Par2Repairer::LoadCreatorPacket(DiskFile *diskfile, u64 offset, PACKET_HEAD
 
   #if 1
 
-  class pipeline_state_load_par2_packets {
+  template <typename CONTAINER>
+  class pipeline_state_container_of_files {
+  private:
+    typedef ptrdiff_t                      index_delta_t;
+    typedef size_t                         index_t;
+
   public:
-    pipeline_state_load_par2_packets(const vector<string>& files, Par2Repairer& delegate) :
+    pipeline_state_container_of_files(
+      const CONTAINER& files, Par2Repairer& delegate) :
       files_(files), delegate_(delegate) { idx_ = 0; }
 
-    const vector<string>& files(void) const { return files_; }
-    Par2Repairer&         delegate(void) const { return delegate_; }
-    unsigned              add_idx(int delta) { return idx_ += delta; }
+    bool                                   execute(void) {
+      const unsigned idx = add_idx(1) - 1;
+      const CONTAINER& files = this->files();
+      const size_t sz = files.size();
+      if (idx >= sz) {
+        add_idx(-1);
+        return false; // done
+      }
 
-  private:
-    const vector<string>& files_;
-    Par2Repairer&         delegate_;
-    tbb::atomic<unsigned> idx_;
-  };
-
-  class filter_load_par2_packets : public tbb::filter {
-  private:
-    filter_load_par2_packets& operator=(const filter_load_par2_packets&); // assignment disallowed
-  protected:
-    pipeline_state_load_par2_packets& state_;
-  public:
-    filter_load_par2_packets(pipeline_state_load_par2_packets& s) :
-      tbb::filter(false /* tbb::filter::parallel */), state_(s) {}
-    virtual void* operator()(void*);
-  };
-
-  //virtual
-  void* filter_load_par2_packets::operator()(void*) {
-    unsigned idx = state_.add_idx(1) - 1;
-    const vector<string>& files = state_.files();
-    if (idx >= files.size()) {
-      state_.add_idx(-1);
-      return NULL; // done
+      execute(files[idx]);
+      return (idx+1)<sz; // if not last file then tell pipeline to keep going
     }
 
-    state_.delegate().LoadPacketsFromFile(files[idx]);
+  protected:
+    const CONTAINER&                       files(void) const { return files_; }
+    Par2Repairer&                          delegate(void) const { return delegate_; }
 
-    return this; // tell tbb::pipeline that there is more to process
+  private:
+    void                                   execute(typename CONTAINER::value_type file);
+
+    index_t                                add_idx(index_delta_t delta) { return idx_ += delta; }
+
+    const CONTAINER&                       files_;
+    Par2Repairer&                          delegate_;
+    tbb::atomic<index_t>                   idx_; // ranges from 0...files_.size() *inclusively*
+  };
+
+  template <typename STATE>
+  class filter_files : public tbb::filter {
+  private:
+    filter_files& operator=(const filter_files&); // assignment disallowed
+  protected:
+    STATE& state_;
+  public:
+    filter_files(STATE& state) : tbb::filter(tbb::filter::parallel), state_(state) {}
+
+    virtual void* operator()(void*) {
+      // execute() returns false if nothing more to do -> returns NULL to
+      // tell tbb::pipeline that there is no more to process
+      return state_.execute() ? this : NULL;
+    }
+  };
+
+  typedef pipeline_state_container_of_files< vector<string> >    pipeline_state_load_par2_packets;
+  typedef filter_files<pipeline_state_load_par2_packets>         filter_load_par2_packets;
+
+  template <>
+  void
+  pipeline_state_container_of_files< vector<string> >::execute(string file) {
+    (void) delegate().LoadPacketsFromFile(file); // LoadPacketsFromFile() always returns true
   }
 
   #else
@@ -1028,17 +1075,21 @@ bool Par2Repairer::LoadPacketsFromOtherFiles(string filename)
   std::set<string, less_string_type> allfiles;
   {
     string wildcard = name.empty() ? "*.par2" : name + ".*.par2";
-    std::auto_ptr< list<string> >  files(DiskFile::FindFiles(path, wildcard));
+    std_auto_ptr< list<string> >  files(DiskFile::FindFiles(path, wildcard));
     std::copy(files->begin(), files->end(), std::inserter(allfiles, allfiles.begin()));
   }
 
   {
     string wildcard = name.empty() ? "*.PAR2" : name + ".*.PAR2";
-    std::auto_ptr< list<string> >  files(DiskFile::FindFiles(path, wildcard));
+    std_auto_ptr< list<string> >  files(DiskFile::FindFiles(path, wildcard));
     std::copy(files->begin(), files->end(), std::inserter(allfiles, allfiles.begin()));
   }
-
-  if (ALL_CONCURRENT == concurrent_processing_level) {
+  #if 1
+  if (1 < GetMaxConcurrency(concurrent_processing_level))
+  #elif 0
+  if (ALL_CONCURRENT == concurrent_processing_level)
+  #endif
+  {
     std::vector<string> v;
     v.reserve(allfiles.size());
     std::copy(allfiles.begin(), allfiles.end(), std::back_inserter(v));
@@ -1047,7 +1098,11 @@ bool Par2Repairer::LoadPacketsFromOtherFiles(string filename)
     tbb::pipeline                    p;
     filter_load_par2_packets         flpp(s);
     p.add_filter(flpp);
+    #if 1
+    p.run(GetMaxConcurrency(concurrent_processing_level));
+    #elif 0
     p.run(tbb::task_scheduler_init::default_num_threads());
+    #endif
   #else
     tbb::parallel_for(tbb::blocked_range<size_t>(0, v.size(), 1),
       ::ApplyLoadPacketsFromFile(this, v));
@@ -1059,7 +1114,7 @@ bool Par2Repairer::LoadPacketsFromOtherFiles(string filename)
   {
     string wildcard = name.empty() ? "*.par2" : name + ".*.par2";
   //list<string> *files = DiskFile::FindFiles(path, wildcard);
-    std::auto_ptr< list<string> >  files(DiskFile::FindFiles(path, wildcard));
+    std_auto_ptr< list<string> >  files(DiskFile::FindFiles(path, wildcard));
 
     // Load packets from each file that was found
     for (list<string>::const_iterator s=files->begin(); s!=files->end(); ++s)
@@ -1071,7 +1126,7 @@ bool Par2Repairer::LoadPacketsFromOtherFiles(string filename)
   {
     string wildcard = name.empty() ? "*.PAR2" : name + ".*.PAR2";
   //list<string> *files = DiskFile::FindFiles(path, wildcard);
-    std::auto_ptr< list<string> >  files(DiskFile::FindFiles(path, wildcard));
+    std_auto_ptr< list<string> >  files(DiskFile::FindFiles(path, wildcard));
 
     // Load packets from each file that was found
     for (list<string>::const_iterator s=files->begin(); s!=files->end(); ++s)
@@ -1089,7 +1144,7 @@ bool Par2Repairer::LoadPacketsFromExtraFiles(const list<CommandLine::ExtraFile> 
 {
   for (ExtraFileIterator i=extrafiles.begin(); i!=extrafiles.end(); i++)
   {
-    string filename = i->FileName();
+    const string &filename = i->FileName();
 
     // If the filename contains ".par2" anywhere
     if (string::npos != filename.find(".par2") ||
@@ -1398,6 +1453,29 @@ bool Par2Repairer::ComputeWindowTable(void)
   {
     GenerateWindowTable(blocksize, windowtable);
     windowmask = ComputeWindowMask(blocksize);
+
+    // 2014/10/25 allocate a pool of FileCheckSummer objects which can
+    // be re-used multiple times; clients take an object from the pool
+    // by calling RemoveFileCheckSummerFromPool() and return it to the
+    // pool for re-use by calling InsertFileCheckSummerIntoPool().
+    assert(filechecksummers.empty());
+#if WANT_CONCURRENT_SOURCE_VERIFICATION
+    const size_t n = GetMaxConcurrency(concurrent_processing_level);
+#else
+    const size_t n = 1;
+#endif
+    for (size_t i = 0; i != n; ++i) {
+      // two step initialization required by ::atomic_ptr<> when
+      // compiling on pre-C++11 compilers:
+      FileCheckSummerPtr fcs;
+      fcs = new FileCheckSummer(blocksize, windowtable, windowmask);
+
+      filechecksummers.push_back(fcs);
+    }
+#if !defined(NDEBUG) && 0
+cout << "filechecksummers.size = " << filechecksummers.size() << endl;
+    this->filechecksummers_available = filechecksummers.size();
+#endif
   }
 
   return true;
@@ -1411,18 +1489,102 @@ static bool SortSourceFilesByFileName(Par2RepairerSourceFile *low,
 
 #if WANT_CONCURRENT_SOURCE_VERIFICATION
 
-void Par2Repairer::VerifyOneSourceFile(Par2RepairerSourceFile *sourcefile, bool& finalresult)
+  #if 1
+  #elif 0
+static
+string
+GetFilenameFor(const Par2RepairerSourceFile *sourcefile,
+               const CommandLine::ExtraFile* extraFile) {
+  assert(!sourcefile != !extraFile); // only ONE of them can be non-NULL
+  if (sourcefile)
+    // What filename does the file use
+    return sourcefile->TargetFileName();
+
+  return DiskFile::GetCanonicalPathname(extraFile->FileName());
+}
+  #endif
+
+void Par2Repairer::VerifyOneSourceOrExtraFile(Par2RepairerSourceFile *sourcefile,
+                    const CommandLine::ExtraFile* extraFile, bool& finalresult) {
+  #if 1
+  assert(!sourcefile != !extraFile); // only ONE of them can be non-NULL
+  // What filename does the file use
+  const string filename(sourcefile ? sourcefile->TargetFileName() :
+                        DiskFile::GetCanonicalPathname(extraFile->FileName()));
+  #elif 0
+  const string filename(GetFilenameFor(sourcefile, extraFile));
+  #endif
+
+  if (NULL != sourcefile) {
+    // Check to see if we have already used this file
+    if (NULL != diskFileMap.Find(filename)) {
+      // The file has already been used!
+      cerr << "Source file " << filename/*filenumber+1*/ << " is a duplicate." << endl;
+      finalresult = false;
+      return;
+    }
+  } else {
+    // Has this file already been dealt with?
+    if (NULL != diskFileMap.Find(filename))
+      return; // Yes
+  }
+
+  DiskFile *diskfile = new DiskFile;
+
+  // Does the target file exist?
+  if (!diskfile->Open(filename)) {
+    // No. The file does not exist.
+    delete diskfile;
+
+    if (NULL != sourcefile && noiselevel > CommandLine::nlSilent) {
+        const string  name(utf8_string_to_cout_parameter(CommandLine::FileOrPathForCout(filename)));
+
+        tbb::mutex::scoped_lock l(cout_mutex);
+        cout << "Target: \"" << name << "\" - missing." << endl;
+    }
+    return;
+  }
+
+  // Yes. Record that fact.
+  if (NULL != sourcefile) {
+    sourcefile->SetTargetExists(true);
+
+    // Remember that the DiskFile is the target file
+    sourcefile->SetTargetFile(diskfile);
+  }
+
+  // Remember that we have processed this file
+  #ifndef NDEBUG
+  const bool success = diskFileMap.Insert(diskfile);
+  assert(success);
+  #else
+  (bool) diskFileMap.Insert(diskfile);
+  #endif
+  // Do the actual verification; the test order is VerifyDataFile() and
+  // then sourcefile because finalresult is only set to false when dealing
+  // with a sourcefile (and not an extraFile which ignores errors).
+  if (!VerifyDataFile(diskfile, sourcefile) && NULL != sourcefile)
+    finalresult = false;
+
+  // We have finished with the file for now
+  diskfile->Close();
+
+  // Find out how much data we have found
+//UpdateVerificationResults(); removed to get better concurrency (caller will call it anyway)
+}
+
+/* void Par2Repairer::VerifyOneSourceFile(Par2RepairerSourceFile *sourcefile, bool& finalresult)
 {
   if (sourcefile) {
     // What filename does the file use
-    string filename = sourcefile->TargetFileName();
+    const string &filename = sourcefile->TargetFileName();
 
     // Check to see if we have already used this file
     if (diskFileMap.Find(filename) != 0)
     {
       // The file has already been used!
 
-      cerr << "Source file " << filename/*filenumber+1*/ << " is a duplicate." << endl;
+      cerr << "Source file " << filename << " is a duplicate." << endl;
 
       finalresult = false;
       return;
@@ -1462,80 +1624,54 @@ void Par2Repairer::VerifyOneSourceFile(Par2RepairerSourceFile *sourcefile, bool&
       delete diskfile;
 
       if (noiselevel > CommandLine::nlSilent) {
-        string  name(utf8_string_to_cout_parameter(CommandLine::FileOrPathForCout(filename)));
+        const string  name(utf8_string_to_cout_parameter(CommandLine::FileOrPathForCout(filename)));
 
         tbb::mutex::scoped_lock l(cout_mutex);
         cout << "Target: \"" << name << "\" - missing." << endl;
       }
     }
   }
-}
+} */
 
-  #if 1
-
-  class pipeline_state_verify_source_file {
+  template <typename CONTAINER>
+  class pipeline_state_verify_files : public pipeline_state_container_of_files<CONTAINER> {
   public:
-    pipeline_state_verify_source_file(const vector<Par2RepairerSourceFile*>& files, bool& finalresult, Par2Repairer& delegate) :
-      files_(files), finalresult_(finalresult), delegate_(delegate) { idx_ = 0; }
-
-    const vector<Par2RepairerSourceFile*>& files(void) const { return files_; }
-    Par2Repairer&                          delegate(void) const { return delegate_; }
-    unsigned                               add_idx(int delta) { return idx_ += delta; }
+    pipeline_state_verify_files(const CONTAINER& files,
+      bool& finalresult, Par2Repairer& delegate) :
+      pipeline_state_container_of_files<CONTAINER>(files, delegate),
+      finalresult_(finalresult) {}
 
     bool&                                  finalresult(void) const { return finalresult_; }
 
-  private:
-    const vector<Par2RepairerSourceFile*>& files_;
-    bool&                                  finalresult_;
-    Par2Repairer&                          delegate_;
-    tbb::atomic<unsigned>                  idx_;
-  };
-
-  class filter_verify_source_file : public tbb::filter {
-  private:
-    filter_verify_source_file& operator=(const filter_verify_source_file&); // assignment disallowed
-  protected:
-    pipeline_state_verify_source_file& state_;
-  public:
-    filter_verify_source_file(pipeline_state_verify_source_file& s) :
-      tbb::filter(false /* tbb::filter::parallel */), state_(s) {}
-    virtual void* operator()(void*);
-  };
-
-  //virtual
-  void* filter_verify_source_file::operator()(void*) {
-    unsigned idx = state_.add_idx(1) - 1;
-    const vector<Par2RepairerSourceFile*>& files = state_.files();
-    if (idx >= files.size()) {
-      state_.add_idx(-1);
-      return NULL; // done
+    bool                                   execute(void) {
+      return finalresult() && pipeline_state_container_of_files<CONTAINER>::execute();
     }
 
-    state_.delegate().VerifyOneSourceFile(files[idx], state_.finalresult());
+  private:
+    bool&                                  finalresult_;
+  };
 
-    return this; // tell tbb::pipeline that there is more to process
+  typedef pipeline_state_verify_files< vector<Par2RepairerSourceFile*> > pipeline_state_verify_source_files;
+  typedef filter_files<pipeline_state_verify_source_files>               filter_verify_source_files;
+
+  template <>
+  void
+  pipeline_state_container_of_files< vector<Par2RepairerSourceFile*> >::execute(Par2RepairerSourceFile* file) {
+    // 2014/10/25 use a generic fn which verifies both source and extra files
+    delegate().VerifyOneSourceOrExtraFile(file, NULL,
+      static_cast<pipeline_state_verify_files< vector<Par2RepairerSourceFile*> >*> (this)->finalresult());
   }
 
-  #else
+  typedef pipeline_state_verify_files< vector<const CommandLine::ExtraFile*> > pipeline_state_verify_extra_files;
+  typedef filter_files<pipeline_state_verify_extra_files>                      filter_verify_extra_files;
 
-template <typename CONTAINER>
-class ApplyVerifyOneSourceFile {
-    Par2Repairer* const _obj;
-    const CONTAINER&    _files;
-    bool&               _finalresult;
-  public:
-    void operator()( const tbb::blocked_range<size_t>& r ) const {
-      Par2Repairer* obj = _obj;
-      const CONTAINER& files = _files;
-      for ( size_t i = r.begin(); i != r.end(); ++i )
-        obj->VerifyOneSourceFile(files[i], _finalresult);
-    }
-
-    ApplyVerifyOneSourceFile( Par2Repairer* obj, const CONTAINER& files, bool& finalresult) :
-      _obj(obj), _files(files), _finalresult(finalresult) {}
-};
-
-  #endif
+  template <>
+  void
+  pipeline_state_container_of_files< vector<const CommandLine::ExtraFile*> >::execute(const CommandLine::ExtraFile* file) {
+    // 2014/10/25 use a generic fn which verifies both source and extra files
+    delegate().VerifyOneSourceOrExtraFile(NULL, file,
+      static_cast<pipeline_state_verify_files< vector<const CommandLine::ExtraFile*> >*> (this)->finalresult());
+  }
 
 #endif
 
@@ -1579,29 +1715,26 @@ bool Par2Repairer::VerifySourceFiles(void)
 
   sort(sortedfiles.begin(), sortedfiles.end(), SortSourceFilesByFileName);
 #if WANT_CONCURRENT_SOURCE_VERIFICATION
-  if (ALL_CONCURRENT == concurrent_processing_level) {
-  #if 1
-    pipeline_state_verify_source_file s(sortedfiles, finalresult, *this);
-    tbb::pipeline                     p;
-    filter_verify_source_file         fvsf(s);
+  if (0 == (SERIAL_VERIFICATION_MASK & concurrent_processing_level)) {
+    pipeline_state_verify_source_files s(sortedfiles, finalresult, *this);
+    filter_verify_source_files         fvsf(s);
+    tbb::pipeline                      p;
     p.add_filter(fvsf);
-    p.run(tbb::task_scheduler_init::default_num_threads());
-  #else
-    tbb::parallel_for(tbb::blocked_range<size_t>(0, sortedfiles.size(), 1),
-      ::ApplyVerifyOneSourceFile< vector<Par2RepairerSourceFile*> >(this, sortedfiles, finalresult));
-  #endif
-  } else for (vector<Par2RepairerSourceFile*>::const_iterator it = sortedfiles.begin(); it != sortedfiles.end(); ++it)
-    VerifyOneSourceFile(*it, finalresult);
+    p.run(GetMaxConcurrency(concurrent_processing_level));
+  } else for (vector<Par2RepairerSourceFile*>::const_iterator it = sortedfiles.begin();
+              finalresult && it != sortedfiles.end(); ++it)
+    VerifyOneSourceOrExtraFile(*it, NULL, finalresult);
+  //VerifyOneSourceFile(*it, finalresult);
 #else
   // Start verifying the files
   sf = sortedfiles.begin();
-  while (sf != sortedfiles.end())
+  while (finalresult && sf != sortedfiles.end())
   {
     // Do we have a source file
     Par2RepairerSourceFile *sourcefile = *sf;
 
     // What filename does the file use
-    string filename = sourcefile->TargetFileName();
+    const string &filename = sourcefile->TargetFileName();
 
     // Check to see if we have already used this file
     if (diskFileMap.Find(filename) != 0)
@@ -1610,7 +1743,8 @@ bool Par2Repairer::VerifySourceFiles(void)
 
       cerr << "Source file " << filenumber+1 << " is a duplicate." << endl;
 
-      return false;
+      finalresult = false;
+      break;
     }
 
     DiskFile *diskfile = new DiskFile;
@@ -1625,12 +1759,12 @@ bool Par2Repairer::VerifySourceFiles(void)
       sourcefile->SetTargetFile(diskfile);
 
       // Remember that we have processed this file
-#ifndef NDEBUG
-      bool success = diskFileMap.Insert(diskfile);
+  #ifndef NDEBUG
+      const bool success = diskFileMap.Insert(diskfile);
       assert(success);
-#else
+  #else
       (bool) diskFileMap.Insert(diskfile);
-#endif
+  #endif
       // Do the actual verification
       if (!VerifyDataFile(diskfile, sourcefile))
         finalresult = false;
@@ -1661,12 +1795,42 @@ bool Par2Repairer::VerifySourceFiles(void)
 // Scan any extra files specified on the command line
 bool Par2Repairer::VerifyExtraFiles(const list<CommandLine::ExtraFile> &extrafiles)
 {
+#if WANT_CONCURRENT_SOURCE_VERIFICATION
+  vector<const CommandLine::ExtraFile*>    files;
+  for (ExtraFileIterator it = extrafiles.begin(); 
+       it != extrafiles.end() && completefilecount<mainpacket->RecoverableFileCount(); 
+       ++it) {
+    const string& filename(it->FileName());
+    if (filename.length() > 4) {
+      string extension(filename.substr(filename.length()-4, 4));
+      for (size_t i = 0; i != extension.length(); ++i)
+        extension[i] = toupper(extension[i]);
+      // If the filename ends in ".par2" then ignore it.
+      if (".PAR2" == extension)
+        continue;
+    }
+
+    files.push_back(&(*it));
+  }
+
+  bool finalresult = true;
+  if (0 == (SERIAL_VERIFICATION_MASK & concurrent_processing_level)) {
+    pipeline_state_verify_extra_files s(files, finalresult, *this);
+    filter_verify_extra_files         fvsf(s);
+    tbb::pipeline                     p;
+    p.add_filter(fvsf);
+    p.run(GetMaxConcurrency(concurrent_processing_level));
+  } else for (vector<const CommandLine::ExtraFile*>::const_iterator it = files.begin();
+              finalresult && it != files.end(); ++it)
+    VerifyOneSourceOrExtraFile(NULL, *it, finalresult);
+
+  return finalresult;
+#else
   for (ExtraFileIterator i=extrafiles.begin(); 
        i!=extrafiles.end() && completefilecount<mainpacket->RecoverableFileCount(); 
        ++i)
   {
-    string filename = i->FileName();
-
+    string filename(i->FileName());
     // If the filename does not include ".par2" we are interested in it.
     if (string::npos == filename.find(".par2") &&
         string::npos == filename.find(".PAR2"))
@@ -1686,15 +1850,15 @@ bool Par2Repairer::VerifyExtraFiles(const list<CommandLine::ExtraFile> &extrafil
         }
 
         // Remember that we have processed this file
-#ifndef NDEBUG
-        bool success = diskFileMap.Insert(diskfile);
+  #ifndef NDEBUG
+        const bool success = diskFileMap.Insert(diskfile);
         assert(success);
-#else
+  #else
         (bool) diskFileMap.Insert(diskfile);
-#endif
+  #endif
 
         // Do the actual verification
-        VerifyDataFile(diskfile, 0);
+        VerifyDataFile(diskfile, NULL);
         // Ignore errors
 
         // We have finished with the file for now
@@ -1707,6 +1871,7 @@ bool Par2Repairer::VerifyExtraFiles(const list<CommandLine::ExtraFile> &extrafil
   }
 
   return true;
+#endif
 }
 
 // Attempt to match the data in the DiskFile with the source file
@@ -1722,7 +1887,6 @@ bool Par2Repairer::VerifyDataFile(DiskFile *diskfile, Par2RepairerSourceFile *so
     u32 count;
 
     // Scan the file at the block level.
-
     if (!ScanDataFile(diskfile,   // [in]      The file to scan
                       sourcefile, // [in/out]  Modified in the match is for another source file
                       matchtype,  // [out]
@@ -1814,6 +1978,9 @@ bool Par2Repairer::VerifyDataFile(DiskFile *diskfile, Par2RepairerSourceFile *so
         offset += want;
       }
 
+      // 2014/10/22 bugfix: was leaking buffer
+      delete [] buffer, buffer = NULL;
+
       // Compute the file hash
       MD5Hash hashfull;
       context.Final(hashfull);
@@ -1877,6 +2044,93 @@ bool Par2Repairer::VerifyDataFile(DiskFile *diskfile, Par2RepairerSourceFile *so
   return true;
 }
 
+FileCheckSummer* Par2Repairer::RemoveFileCheckSummerFromPool(void) {
+  for (vector<FileCheckSummerPtr>::iterator it = filechecksummers.begin();
+      it != filechecksummers.end(); ++it) {
+    FileCheckSummerPtr& fcs(*it);
+#if WANT_CONCURRENT_SOURCE_VERIFICATION
+    FileCheckSummer* wanted_value = fcs.load();
+    while (NULL != wanted_value) {
+      FileCheckSummer*const actual_value = fcs.compare_and_swap(NULL, wanted_value);
+      if (actual_value == wanted_value) {
+        // this thread 'owns' the FileCheckSummer* object and has set the entry
+        // in the pool to NULL
+#if !defined(NDEBUG) && 0
+cout << "--filechecksummers_available = " << --this->filechecksummers_available << endl;
+#endif
+        return actual_value;
+      }
+
+      // the assert is not true because the value in fcs could have been NULL'd
+      // and then changed to another FileCheckSummer* after this thread called
+      // load() but before executing the compare_and_swap()
+    //assert(NULL == actual_value);
+
+      // If another thread has already removed the wanted_value FileCheckSummer*
+      // and there is now nothing in the entry (ie, actual_value is NULL) then
+      // exit the while loop to try another entry in the pool else (actual_value
+      // is non-NULL because another thread got the entry and then yet another
+      // thread replaced the slot with a different entry) try to acquire this
+      // different entry by re-looping.
+      wanted_value = actual_value;
+    }
+#else
+    if (NULL == fcs)
+      continue;
+
+    *it = NULL;
+    return fcs;
+#endif
+  }
+
+#if !defined(NDEBUG) && 0
+cout << "  filechecksummers_available = " << this->filechecksummers_available << endl;
+#endif
+  // there will always be enough non-NULL entries in the pool for this
+  // code to succeed so the for loop will never reach its exit condition
+  assert(false);
+  return NULL;
+}
+
+void Par2Repairer::InsertFileCheckSummerIntoPool(FileCheckSummer* value) {
+  for (vector<FileCheckSummerPtr>::iterator it = filechecksummers.begin();
+      it != filechecksummers.end(); ++it) {
+    FileCheckSummerPtr& fcs(*it);
+#if WANT_CONCURRENT_SOURCE_VERIFICATION
+    FileCheckSummer*const fcs_value = fcs.load();
+    if (NULL == fcs_value) {
+      FileCheckSummer*const actual_value = fcs.compare_and_swap(value, fcs_value);
+      if (actual_value == fcs_value) { // == NULL
+        // this thread no longer 'owns' the value FileCheckSummer* object
+        // and has put it back in the pool
+#if !defined(NDEBUG) && 0
+cout << "++filechecksummers_available = " << ++this->filechecksummers_available << endl;
+#endif
+        return;
+      }
+
+      // oops. Another thread has beaten this thread and stored a different
+      // FileCheckSummer* object into this pool entry; need to try a
+      // different entry in the pool
+      assert(NULL != actual_value);
+    }
+#else
+    if (NULL != fcs)
+      continue;
+
+    *it = value;
+    return;
+#endif
+  }
+
+  // there will always be enough NULL entries in the pool for this
+  // code to succeed so the for loop will never reach its exit condition
+#if !defined(NDEBUG) && 0
+cout << "  filechecksummers_available = " << this->filechecksummers_available << endl;
+#endif
+  assert(false);
+}
+
 // Perform a sliding window scan of the DiskFile looking for blocks of data that 
 // might belong to any of the source files (for which a verification packet was
 // available). If a block of data might be from more than one source file, prefer
@@ -1894,8 +2148,8 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
 
   matchtype = eNoMatch;
 
-  string name(utf8_string_to_cout_parameter(CommandLine::FileOrPathForCout(
-              diskfile->FileName())));
+  const string name(utf8_string_to_cout_parameter(CommandLine::FileOrPathForCout(
+                    diskfile->FileName())));
 
   // Is the file empty
   if (diskfile->FileSize() == 0)
@@ -1926,9 +2180,16 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
   }
  */
   // Create the checksummer for the file and start reading from it
+#if 1
+  StFileCheckSummer filechecksummer(this, RemoveFileCheckSummerFromPool());
+  assert(NULL != filechecksummer);
+  if (!filechecksummer->Start(diskfile))
+    return false;
+#else
   FileCheckSummer filechecksummer(diskfile, blocksize, windowtable, windowmask);
   if (!filechecksummer.Start())
     return false;
+#endif
 
   // Assume we will make a perfect match for the file
   matchtype = eFullMatch;
@@ -1945,10 +2206,10 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
   // Which block do we expect to find first
   const VerificationHashEntry *nextentry = 0;
 
-  u64 progress = 0; // WARNING: this local var shadows a member var
-
   // Whilst we have not reached the end of the file
-  while (filechecksummer.Offset() < diskfile->FileSize())
+  // WARNING: the 'progress' local var shadows a member var
+  for (u64 offset = filechecksummer->Offset(), filesize = diskfile->FileSize(), progress = 0;
+      offset < filesize; offset = filechecksummer->Offset())
   {
     if (noiselevel > CommandLine::nlQuiet)
     {
@@ -1957,8 +2218,8 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
       if ((now - last_cout).seconds() >= 0.1) { // only update every 0.1 seconds
 #endif
         // Update a progress indicator
-        u32 oldfraction = (u32)(1000 * progress / diskfile->FileSize());
-        u32 newfraction = (u32)(1000 * (progress = filechecksummer.Offset()) / diskfile->FileSize());
+        u32 oldfraction = (u32)(1000 * progress / filesize);
+        u32 newfraction = (u32)(1000 * (progress = offset) / filesize);
         if (oldfraction != newfraction)
         {
 #if WANT_CONCURRENT
@@ -1969,7 +2230,7 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
         }
 #if WANT_CONCURRENT
       } else
-        progress = filechecksummer.Offset();
+        progress = offset;
 #endif
     }
 
@@ -1978,7 +2239,7 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
     bool duplicate;
 
     // Look for a match
-    const VerificationHashEntry *currententry = verificationhashtable.FindMatch(nextentry, sourcefile, filechecksummer, duplicate);
+    const VerificationHashEntry *currententry = verificationhashtable.FindMatch(nextentry, sourcefile, *filechecksummer, duplicate);
 
     // Did we find a match
     if (currententry != 0)
@@ -1992,7 +2253,7 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
         // If the first match found was not actually the first block
         // for the source file, or it was not at the start of the
         // data file: then this is a partial match.
-        if (!currententry->FirstBlock() || filechecksummer.Offset() != 0)
+        if (!currententry->FirstBlock() || offset != 0)
         {
           matchtype = ePartialMatch;
         }
@@ -2017,7 +2278,7 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
       if (blocksallocated)
       {
         // Record the match
-        currententry->SetBlock(diskfile, filechecksummer.Offset());
+        currententry->SetBlock(diskfile, offset);
 //printf("%s match at %llu -> %u matches\n", matchtype == ePartialMatch ? "partial" : "full", filechecksummer.Offset(), 1 + count);
       }
 
@@ -2028,7 +2289,7 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
       nextentry = currententry->Next();
 
       // Advance to the next block
-      if (!filechecksummer.Jump(currententry->GetDataBlock()->GetLength()))
+      if (!filechecksummer->Jump(currententry->GetDataBlock()->GetLength()))
         return false;
     }
     else
@@ -2045,7 +2306,7 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
         nextentry = 0;
 
         // Advance one whole block
-        if (!filechecksummer.Jump(blocksize))
+        if (!filechecksummer->Jump(blocksize))
           return false;
       }
       else
@@ -2054,14 +2315,14 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
         nextentry = 0;
 
         // Advance 1 byte
-        if (!filechecksummer.Step())
+        if (!filechecksummer->Step())
           return false;
       }
     }
   }
 
   // Get the Full and 16k hash values of the file
-  filechecksummer.GetFileHashes(hashfull, hash16k);
+  filechecksummer->GetFileHashes(hashfull, hash16k);
 
   // Did we make any matches at all
   if (count > 0)
@@ -2075,7 +2336,12 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
         hash16k              != sourcefile->GetDescriptionPacket()->Hash16k())
     {
       matchtype = ePartialMatch;
-
+#if !defined(NDEBUG) && 0
+cout << "count = " << count << " vs " << sourcefile->GetVerificationPacket()->BlockCount() <<
+", filesize = " << diskfile->FileSize() << " vs " << sourcefile->GetDescriptionPacket()->FileSize() <<
+", hashfull " << hashfull << " vs " << sourcefile->GetDescriptionPacket()->HashFull() <<
+", hash16k " << hash16k << " vs " << sourcefile->GetDescriptionPacket()->Hash16k() << endl;
+#endif
       if (noiselevel > CommandLine::nlSilent)
       {
 #if WANT_CONCURRENT
@@ -2122,8 +2388,8 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
           // Were we scanning the target file or an extra file
           else if (originalsourcefile != 0)
           {
-            string targetname(utf8_string_to_cout_parameter(CommandLine::FileOrPathForCout(
-                              sourcefile->TargetFileName())));
+            const string targetname(utf8_string_to_cout_parameter(CommandLine::FileOrPathForCout(
+                                    sourcefile->TargetFileName())));
 
             cout << "Target: \"" 
                  << name
@@ -2138,8 +2404,8 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
           }
           else
           {
-            string targetname(utf8_string_to_cout_parameter(CommandLine::FileOrPathForCout(
-                              sourcefile->TargetFileName())));
+            const string targetname(utf8_string_to_cout_parameter(CommandLine::FileOrPathForCout(
+                                    sourcefile->TargetFileName())));
 
             cout << "File: \"" 
                  << name
@@ -2171,8 +2437,8 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
         // Were we scanning the target file or an extra file
         else if (originalsourcefile != 0)
         {
-          string targetname(utf8_string_to_cout_parameter(CommandLine::FileOrPathForCout(
-                            sourcefile->TargetFileName())));
+          const string targetname(utf8_string_to_cout_parameter(CommandLine::FileOrPathForCout(
+                                  sourcefile->TargetFileName())));
 
           cout << "Target: \"" 
                << name
@@ -2183,8 +2449,8 @@ bool Par2Repairer::ScanDataFile(DiskFile                *diskfile,    // [in]
         }
         else
         {
-          string targetname(utf8_string_to_cout_parameter(CommandLine::FileOrPathForCout(
-                            sourcefile->TargetFileName())));
+          const string targetname(utf8_string_to_cout_parameter(CommandLine::FileOrPathForCout(
+                                  sourcefile->TargetFileName())));
 
           cout << "File: \"" 
                << name
@@ -2471,7 +2737,7 @@ bool Par2Repairer::CreateTargetFiles(void)
     if (!sourcefile->GetTargetExists())
     {
       DiskFile *targetfile = new DiskFile;
-      string filename = sourcefile->TargetFileName();
+      const string &filename = sourcefile->TargetFileName();
       u64 filesize = sourcefile->GetDescriptionPacket()->FileSize();
 
       // Create the target file
@@ -2801,7 +3067,12 @@ private:
 
 void Par2Repairer::ProcessDataConcurrently(size_t blocklength, u32 inputindex, buffer& inputbuffer)
 {
-  if (ALL_SERIAL != concurrent_processing_level) {
+  #if 1
+  if (1 < GetMaxConcurrency(concurrent_processing_level))
+  #elif 0
+  if (ALL_SERIAL != concurrent_processing_level)
+  #endif
+  {
     static tbb::affinity_partitioner ap;
     tbb::parallel_for(tbb::blocked_range<u32>(0, missingblockcount),
       ::ApplyPar2RepairerRSProcess(this, blocklength, inputindex, inputbuffer), ap);
@@ -2840,7 +3111,11 @@ bool Par2Repairer::ProcessData(u64 blockoffset, size_t blocklength)
   {
 #if WANT_CONCURRENT && CONCURRENT_PIPELINE
 //cout << "Repairing using async I/O." << endl;
+  #if 1
+    const size_t max_tokens = GetMaxConcurrency(concurrent_processing_level);
+  #elif 0
     const size_t max_tokens = ALL_SERIAL == concurrent_processing_level ? 1 : tbb::task_scheduler_init::default_num_threads();
+  #endif
     repair_pipeline_state s(max_tokens, chunksize, missingblockcount, blocklength, blockoffset, inputblocks, copyblocks);
 
     tbb::pipeline p;

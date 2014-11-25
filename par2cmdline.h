@@ -27,7 +27,7 @@
 #define __PARCMDLINE_H__
 
 
-#ifdef WIN32
+#if defined(WIN32)
 // Windows includes
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -85,8 +85,8 @@ typedef unsigned int     size_t;
       li.QuadPart = off;
       this->Offset = li.LowPart;        /* File offset */
       this->OffsetHigh = li.HighPart;        /* File offset */
-      BOOL b = want_write ? ::WriteFile(hFile, buf, sz, NULL, this) :
-                            ::ReadFile(hFile, const_cast<void*> (buf), sz, NULL, this);
+      BOOL b = want_write ? ::WriteFile(hFile, buf, (DWORD) sz, NULL, this) :
+               ::ReadFile(hFile, const_cast<void*> (buf), (DWORD) sz, NULL, this);
       if (!b)
         b = ERROR_IO_PENDING == ::GetLastError(); // request has already completed or is pending
       if (b)
@@ -134,7 +134,7 @@ typedef unsigned int     size_t;
     }
   };
 
-#else // WIN32
+#else // #if defined(WIN32)
 #ifdef HAVE_CONFIG_H
 
 #include <config.h>
@@ -248,7 +248,7 @@ typedef unsigned long long u64;
 #  include <aio.h>
 #  include <assert.h>
 
-  #define HAVE_ASYNC_IO 1
+  #define HAVE_ASYNC_IO 0 // 2013/12/27 reverted to sync I/O because of numerous bug reports
 
   #ifndef NDEBUG
     extern bool want_printf(int res);
@@ -351,11 +351,11 @@ typedef   unsigned long long   u64;
 #endif
 #endif
 
-#ifdef WIN32
+#if defined(WIN32)
   #define PATHSEP "\\"
   #define ALTPATHSEP "/"
 
-  #ifdef UNICODE
+  #ifdef _UNICODE // _UNICODE means "use Unicode variants of CRT APIs"; UNICODE means "use Unicode variants of Win32 APIs, eg, CreateWindowW instead of CreateWindowA"
     #define stat _wstati64 /* _stat64 */ /* 'i64' so that files >= 4GB can be processed, was: #define stat _stat */
     #define struct_stat struct _stati64 /* _stati64 */ /* _stat64 */ /* 'i64' so that files >= 4GB can be processed, was: #define stat _stat */
     // should probably rewrite these as inline functions instead of macros - but watch out for the '.c_str()' usage on tmp strings:
@@ -437,7 +437,7 @@ typedef enum Result
 
 using namespace std;
 
-#ifdef WIN32
+#if defined(WIN32)
   extern wstring UTF8_to_UTF16(const char* utf8_str, size_t utf8_length);
   extern wstring UTF8_to_UTF16(const string& utf8);
   extern string  UTF8_string_to_cout_string(const string& utf8);
@@ -496,7 +496,57 @@ using namespace std;
     #define CONCURRENT_PIPELINE 1
   #endif
 
+  #if 1
+  // 2014/10/07 allow more control over the concurrency by allowing user
+  // to specify the maximum number of threads this program can use; the
+  // desire to serially generate or verify checksums is now stored in
+  // the highest bit, accessed by masking with SERIAL_VERIFICATION_MASK;
+  // the remaining bits specify the maximum concurrency, accessed by
+  // masking with CONCURRENCY_MASK or by using GetMaxConcurrency().
+  typedef size_t concurrency_processing_t;
+  enum {
+    SERIAL_VERIFICATION_BIT   = 8 * sizeof(size_t) - 1,
+    SERIAL_VERIFICATION_MASK  = 1ULL << SERIAL_VERIFICATION_BIT,
+    CONCURRENCY_MASK          = ~SERIAL_VERIFICATION_MASK,
+    INVALID_CONCURRENCY_LEVEL = 0
+  };
+  static inline size_t GetMaxConcurrency(size_t concurrent_processing_level) {
+    return CONCURRENCY_MASK & concurrent_processing_level;
+  }
+  #elif 0
   enum { ALL_SERIAL, CHECKSUM_SERIALLY_BUT_PROCESS_CONCURRENTLY, ALL_CONCURRENT };
+  #endif
+#endif
+
+#if HAVE_STD_UNIQUE_PTR
+  // for g++ 4.7.2 when CXXFLAGS contains "-std=c++11"
+  #define std_auto_ptr std::unique_ptr
+  #include <memory>
+#elif HAVE_STD_AUTO_PTR
+  #define std_auto_ptr std::auto_ptr
+  #include <memory>
+#else
+  // std::auto_ptr<T> and std::unique_ptr<T> do not exist so provide our own version:
+  template <typename T>
+  class std_auto_ptr {
+  public:
+    explicit std_auto_ptr(T *ptr = NULL) : ptr_(ptr) {}
+    ~std_auto_ptr(void) { if (ptr_) delete ptr_; }
+
+    T *release(void) { T *tmp = ptr_; ptr_ = NULL; return tmp; }
+
+    const T *get(void) const { return ptr_; }
+    T *get(void) { return ptr_; }
+
+    T *operator->(void) { return ptr_; }
+    const T *operator->(void) const { return ptr_; }
+
+    T &operator*(void) { return *ptr_; }
+    const T &operator*(void) const { return *ptr_; }
+
+  private:
+    T *ptr_;
+  };
 #endif
 
 #include "letype.h"

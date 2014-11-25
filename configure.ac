@@ -4,7 +4,7 @@ dnl
 dnl  Copyright (c) 2003 Peter Brian Clements
 dnl
 dnl  Modifications for specific OS support (Mac, Linux, FreeBSD), and x86/x86_64
-dnl  assembly code building (c) 2008 Vincent Tan.
+dnl  assembly code building (c) 2008-2014 Vincent Tan.
 dnl
 dnl  par2cmdline is free software; you can redistribute it and/or modify
 dnl  it under the terms of the GNU General Public License as published by
@@ -171,6 +171,40 @@ AC_CHECK_FUNCS([getopt] [getopt_long])
 
 AC_CHECK_FUNCS([realpath])
 
+dnl Check for C++ unique_ptr or auto_ptr classes
+AC_MSG_CHECKING([for std::unique_ptr<T> or std::auto_ptr<T>])
+std_smart_ptr=no
+AC_LANG_PUSH([C++])
+
+SAVED_CXXFLAGS="${CXXFLAGS}"
+CXXFLAGS="${CXXFLAGS} -std=c++11"
+AC_LANG_PUSH([C++])
+AC_COMPILE_IFELSE(
+  [AC_LANG_PROGRAM([[#include <memory>]]
+                   [[#include <vector>]],
+                   [[const std::unique_ptr< std::vector<int> > up;]])],
+  [AC_DEFINE([HAVE_STD_UNIQUE_PTR], [1], [Define to 1 if std::unique_ptr<T> exists in <memory>]) std_smart_ptr='found.std::unique_ptr<T>'])
+CXXFLAGS="${SAVED_CXXFLAGS}"
+AC_LANG_POP([C++])
+
+if test $std_smart_ptr = no; then
+  AC_COMPILE_IFELSE(
+    [AC_LANG_PROGRAM([[#include <memory>]]
+                     [[#include <vector>]],
+                     [[const std::auto_ptr< std::vector<int> > ap;]])],
+    [AC_DEFINE([HAVE_STD_AUTO_PTR], [1], [Define to 1 if std::auto_ptr<T> exists in <memory>]) std_smart_ptr='found.std::auto_ptr<T>'])
+fi
+
+AC_LANG_POP([C++])
+AC_MSG_RESULT([$std_smart_ptr])
+
+if test $std_smart_ptr = 'found.std::unique_ptr<T>'; then
+  AC_SUBST(PAR2_CXXFLAGS, [-std=c++11])
+else
+  AC_SUBST(PAR2_CXXFLAGS, [''])
+fi
+
+dnl Generate output
 AC_CONFIG_FILES([stamp-h], [echo timestamp > stamp-h])
 AC_CONFIG_FILES([Makefile])
 AC_OUTPUT

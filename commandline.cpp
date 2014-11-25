@@ -31,6 +31,9 @@
 #endif
 
 #include <set>
+#include <algorithm>
+#undef min // Windows header defines this
+#undef max // Windows header defines this
 
 #ifdef _MSC_VER
 #ifdef _DEBUG
@@ -52,6 +55,9 @@ static char THIS_FILE[]=__FILE__;
   #include <tchar.h>
 
   enum { OS_SEPARATOR = '\\', OTHER_OS_SEPARATOR = '/' };
+
+  #define ATOI  _ttoi
+  #define ATOUL _tcstoul
 
   wstring
   UTF8_to_UTF16(const char* utf8_str, size_t utf8_length)
@@ -92,12 +98,12 @@ static char THIS_FILE[]=__FILE__;
       assert(j == i);
     }
 
-    i = ::FoldString(MAP_PRECOMPOSED, tmp.c_str(), tmp.length(), NULL, 0);
+    i = ::FoldStringW(MAP_PRECOMPOSED, tmp.c_str(), (int) tmp.length(), NULL, 0);
     if (0 == i)
       return wstring();
 
     wstring res(i, '\0'); // i does not include the end '\0' char
-    j = ::FoldString(MAP_PRECOMPOSED, tmp.c_str(), tmp.length(), &res[0], i);
+    j = ::FoldStringW(MAP_PRECOMPOSED, tmp.c_str(), (int) tmp.length(), &res[0], i);
     assert(j == i);
     if (0 == j || j != i)
       return wstring();
@@ -123,7 +129,7 @@ static char THIS_FILE[]=__FILE__;
       i = ::WideCharToMultiByte(cp,      //    code page
             0,                           //    performance and mapping flags
             utf16.c_str(),               //    wide-character string
-            utf16.length(),              //    number of chars in string
+            (int) utf16.length(),        //    number of chars in string
             NULL,                        //    buffer for new string
             0,                           //    size of buffer in bytes
             NULL, NULL);
@@ -140,7 +146,7 @@ static char THIS_FILE[]=__FILE__;
       j = ::WideCharToMultiByte(cp,      //    code page
             0,                           //    performance and mapping flags
             utf16.c_str(),               //    wide-character string
-            utf16.length(),              //    number of chars in string
+            (int) utf16.length(),        //    number of chars in string
             &res[0],                     //    buffer for new string
             i,                           //    size of buffer in bytes
             NULL, NULL);
@@ -170,12 +176,12 @@ static char THIS_FILE[]=__FILE__;
     // (UTF-8) characters, so first decompose the string then
     // convert it to UTF-8
 
-    i = ::FoldString(MAP_COMPOSITE, utf16, -1, NULL, 0);
+    i = ::FoldStringW(MAP_COMPOSITE, utf16, -1, NULL, 0);
     if (0 == i)
       return string();
 
     wstring tmp(i, '\0'); // i includes the '\0' char
-    j = ::FoldString(MAP_COMPOSITE, utf16, -1, &tmp[0], i);
+    j = ::FoldStringW(MAP_COMPOSITE, utf16, -1, &tmp[0], i);
     assert(j == i);
     if (0 == j || j != i)
       return string();
@@ -215,6 +221,9 @@ static char THIS_FILE[]=__FILE__;
 
   enum { OS_SEPARATOR = '/', OTHER_OS_SEPARATOR = '\\' };
   #include <dirent.h>
+
+  #define ATOI  atoi
+  #define ATOUL strtoul
 
 /*#include <CoreFoundation/CoreFoundation.h>
 
@@ -265,7 +274,7 @@ static
 void
 build_file_list_in_imp(string dir, list<string>* l)
 {
-#if WIN32
+#ifdef WIN32
   dir += OS_SEPARATOR;
   dir += '*';
 
@@ -304,10 +313,22 @@ build_file_list_in_imp(string dir, list<string>* l)
     if (name[0] == '.') // ignore invisible files/folders
       continue;
 
+  // 2011/06/27: the portable way is to use stat, esp. for Solaris
+  #if HAVE_SYS_STAT_H
+    string path(dir + name);
+    struct stat statbuf;
+    if (0 != stat(path.c_str(), &statbuf))
+      continue;
+    if (S_ISDIR(statbuf.st_mode) /* d_type == DT_DIR */)
+      /* dump_utf8_as_utf16(name), */ build_file_list_in_imp(path, l);
+    else
+      l->push_back(path);
+  #else
     if (d->d_type == DT_DIR)
       /* dump_utf8_as_utf16(name), */ build_file_list_in_imp(dir + name, l);
     else
       l->push_back(dir + name);
+  #endif
   }
   closedir(dirp);
 #endif
@@ -326,7 +347,7 @@ build_file_list_in(const char* dir)
   if (OTHER_OS_SEPARATOR == c || OS_SEPARATOR == c)
     s.erase(i);
 
-  std::auto_ptr< list<string> > res(new list<string>);
+  std_auto_ptr< list<string> > res(new list<string>);
   if (!res.get())
     return NULL;
 
@@ -397,6 +418,7 @@ CommandLine::CommandLine(void)
 : operation(opNone)
 , version(verUnknown)
 , noiselevel(nlUnknown)
+, opening_message_limit(200) // default
 , blockcount(0)
 , blocksize(0)
 , firstblock(0)
@@ -412,7 +434,7 @@ CommandLine::CommandLine(void)
 , largestsourcesize(0)
 , memorylimit(0)
 #if WANT_CONCURRENT
-, concurrent_processing_level(ALL_CONCURRENT) // whether to process everything serially or concurrently
+, concurrent_processing_level(tbb::task_scheduler_init::default_num_threads()) // with concurrent verification
 #endif
 , create_dummy_par_files(false)
 {
@@ -450,12 +472,37 @@ void CommandLine::usage(void)
     "  -m<n>  : Memory (in MB) to use\n"
     "  -v [-v]: Be more verbose\n"
     "  -q [-q]: Be more quiet (-q -q gives silence)\n"
+    "  -z<n>  : Number of \"Opening: <file>\" messages when creating parity files (zero for no limit)\n" // 2014/11/25
 #if WANT_CONCURRENT
+  #if 1
+    // 2014/10/07 added ability to specify how many logical CPUs (threads) to use;
+    // "all available logical CPUs" means whatever the OS allows the executable to
+    // use, so on a 8 CPU system where par2 is allowed to use 6 CPUs, then "all
+    // available logical CPUs" is 6. On Windows, this value is determined by the
+    // "processor affinity mask" assigned to each Windows process by the system.
+    "  -t<+<n>|0<n>|-<n>>: Threaded processing. The options are:\n"
+    "     -t+ to checksum and create/repair concurrently - uses all available logical CPUs - good for hard disk files - [default]\n"
+    "     -t0 to checksum serially but create/repair concurrently with all available logical CPUs - better for slow media such as CDs/DVDs\n"
+    "     -t- to checksum/create/repair serially - uses a single logical CPU - good for testing this program\n"
+    "     -t+n to checksum and create/repair concurrently - uses n logical CPUs (up to all of the available logical CPUs)\n"
+    "     -t0n to checksum serially but create/repair concurrently - uses n logical CPUs if n > 0, or all available CPUs minus n if n < 0\n"
+    "     -t-n to checksum and create/repair concurrently - uses available logical CPUs minus n, eg, -t-1 on a 6 CPU system will use up to 5 CPUs\n"
+  #elif 0
     "  -t<+|0|->: Threaded processing. The options are:\n"
 	"     -t+ to checksum and create/repair concurrently - uses multiple threads - good for hard disk files - [default]\n"
 	"     -t0 to checksum serially but create/repair concurrently - good for slow media such as CDs/DVDs\n"
 	"     -t- to checksum/create/repair serially - uses a single thread - good for testing this program\n"
+  #endif
 #endif
+
+#if defined(WIN32)
+    // 2014/10/07
+    "  -p<N|L|I>: Processing priority. The options are:\n"
+    "     -pN to process at normal priority [default]\n"
+    "     -pL to process at low priority\n"
+    "     -pI to process at idle priority\n"
+#endif
+
     // 2007/10/21
     "  -d<dir>: root directory for paths to be put in par2 files OR root directory for files to repair from par2 files\n"
     // 2008/07/07
@@ -887,23 +934,74 @@ bool CommandLine::Parse(int argc, TCHAR *argv[])
           }
           break;
 
-        case 'd': {
-          base_directory = DiskFile::GetCanonicalPathname(native_char_array_to_utf8_string(2 + argv[0]));
-          if (base_directory.empty()) {
-            cerr << "base directory for hierarchy support must specify a folder" << endl;
-            return false;
-          } else if (operation == opCreate && !is_existing_folder(base_directory)) {
-            cerr << "the base directory (" << base_directory << ") for hierarchy support must specify an accessible and existing folder" << endl;
+        case 'z': // 2014/11/25 added message limit
+          opening_message_limit = (u32) ATOUL(2 + argv[0], NULL, 10);
+          if (opening_message_limit > 32767) {
+            cerr << "Value for -z must be between 0 and 32767." << endl;
             return false;
           }
-          if (base_directory[base_directory.length()-1] != OS_SEPARATOR)
-            base_directory += OS_SEPARATOR;
           break;
-        }
+
+        case 'd':
+          {
+            base_directory = DiskFile::GetCanonicalPathname(native_char_array_to_utf8_string(2 + argv[0]));
+            if (base_directory.empty()) {
+              cerr << "base directory for hierarchy support must specify a folder" << endl;
+              return false;
+            } else if (operation == opCreate && !is_existing_folder(base_directory)) {
+              cerr << "the base directory (" << base_directory << ") for hierarchy support must specify an accessible and existing folder" << endl;
+              return false;
+            }
+            if (base_directory[base_directory.length()-1] != OS_SEPARATOR)
+              base_directory += OS_SEPARATOR;
+          }
+          break;
 
 #if WANT_CONCURRENT
         case 't':
           {
+  #if 1
+            int n;
+            const size_t max_concurrency = tbb::task_scheduler_init::default_num_threads();
+            switch (argv[0][2]) {
+            case '-':
+            case '+': {
+              if ('\0' == argv[0][3])
+                concurrent_processing_level = '-' == argv[0][2] ? 1 : max_concurrency;
+              else {
+                n = ATOI(3 + argv[0]);
+                if (0 < n)
+                  concurrent_processing_level = '-' == argv[0][2] ? std::max(size_t(1), size_t(max_concurrency - n)) : std::min(max_concurrency, size_t(n));
+                else {
+                  cerr << "Cannot specify negative or zero value for n in parameter -t" << char(argv[0][2]) << "<n>." << endl;
+                  return false;
+                }
+              }
+              break;
+            }
+            case '0': {
+              if ('\0' == argv[0][3])
+                concurrent_processing_level = max_concurrency;
+              else {
+                n = ATOI(3 + argv[0]);
+                if (0 != n)
+                  concurrent_processing_level = n < 0 ? std::max(size_t(1), size_t(max_concurrency + n)) : std::min(max_concurrency, size_t(n));
+                else {
+                  cerr << "Cannot specify zero value for n in parameter -t0<n>." << endl;
+                  return false;
+                }
+              }
+              concurrent_processing_level |= SERIAL_VERIFICATION_MASK;
+              break;
+            }
+            default:
+              cerr << "Expected -t+ (use multiple cores) or -t0 (checksum serially, process concurrently) or -t- (use single core)" << endl
+                   << "or -t+n (use up to n cores) or -t-n (use all available cores minus n) or -t0n (checksum serially, process " << endl
+                   << "concurrently using up to n cores if n > 0, or all available cores minus n if n < 0)." << endl;
+              return false;
+            }
+            assert(1 <= GetMaxConcurrency(concurrent_processing_level) && GetMaxConcurrency(concurrent_processing_level) <= max_concurrency);
+  #elif 0
             switch (argv[0][2]) {
             case '-':
               concurrent_processing_level = ALL_SERIAL;
@@ -916,6 +1014,29 @@ bool CommandLine::Parse(int argc, TCHAR *argv[])
               break;
             default:
               cerr << "Expected -t+ (use multiple cores) or -t0 (checksum serially, process concurrently) or -t- (use single core)." << endl;
+              return false;
+            }
+  #endif
+          }
+          break;
+#endif
+
+#if defined(WIN32)
+        // 2014/10/07
+        case 'p':
+          {
+            switch (toupper(argv[0][2])) {
+            case 'N':
+              SetPriorityClass(GetCurrentProcess(), NORMAL_PRIORITY_CLASS);
+              break;
+            case 'L':
+              SetPriorityClass(GetCurrentProcess(), BELOW_NORMAL_PRIORITY_CLASS);
+              break;
+            case 'I':
+              SetPriorityClass(GetCurrentProcess(), IDLE_PRIORITY_CLASS);
+              break;
+            default:
+              cerr << "Expected -pN (run at normal priority) or -pL (run at low priority) or -pI (run at idle priority)." << endl;
               return false;
             }
           }
@@ -934,6 +1055,7 @@ bool CommandLine::Parse(int argc, TCHAR *argv[])
             continue;
           }
           break;
+
         default:
           {
             cerr << "Invalid option specified: " << argv[0] << endl;
@@ -1170,7 +1292,7 @@ bool CommandLine::Parse(int argc, TCHAR *argv[])
   // Assume a memory limit of 16MB if not specified.
   if (memorylimit == 0)
   {
-#if defined(WIN32) || defined(WIN64)
+#if defined(WIN32)
     u64 TotalPhysicalMemory = 0;
 
     HMODULE hLib = ::LoadLibraryA("kernel32.dll");

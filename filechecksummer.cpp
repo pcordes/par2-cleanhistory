@@ -29,7 +29,28 @@ static char THIS_FILE[]=__FILE__;
 
 // Construct the checksummer and allocate buffers
 
-FileCheckSummer::FileCheckSummer(DiskFile   *_diskfile,
+FileCheckSummer::FileCheckSummer(
+  u64         _blocksize,
+  const u32 (&_windowtable)[256],
+  u32         _windowmask)
+: diskfile(NULL)
+, blocksize(_blocksize)
+, windowtable(_windowtable)
+, windowmask(_windowmask)
+, filesize(0)
+, currentoffset(0)
+, buffer(NULL)
+, outpointer(NULL)
+, inpointer(NULL)
+, tailpointer(NULL)
+, readoffset(0)
+, checksum(0)
+{
+//filesize = diskfile->FileSize();
+  buffer = new char[(size_t)blocksize * 2];
+}
+
+/* FileCheckSummer::FileCheckSummer(DiskFile   *_diskfile,
                                  u64         _blocksize,
                                  const u32 (&_windowtable)[256],
                                  u32         _windowmask)
@@ -43,7 +64,7 @@ FileCheckSummer::FileCheckSummer(DiskFile   *_diskfile,
   filesize = diskfile->FileSize();
 
   currentoffset = 0;
-}
+} */
 
 FileCheckSummer::~FileCheckSummer(void)
 {
@@ -51,8 +72,15 @@ FileCheckSummer::~FileCheckSummer(void)
 }
 
 // Start reading the file at the beginning
-bool FileCheckSummer::Start(void)
+bool FileCheckSummer::Start(DiskFile *diskfile_) // 2014/10/25
+//bool FileCheckSummer::Start(void)
 {
+  assert(NULL != diskfile_); // 2014/10/25
+  diskfile = diskfile_; // 2014/10/25
+  filesize = diskfile_->FileSize(); // 2014/10/25
+  contextfull.Reset(); // 2014/10/25
+  context16k.Reset(); // 2014/10/25
+
   currentoffset = readoffset = 0;
 
   tailpointer = outpointer = buffer;
@@ -212,7 +240,7 @@ void FileCheckSummer::GetFileHashes(MD5Hash &hashfull, MD5Hash &hash16k) const
 }
 
 // Compute and return the current hash
-MD5Hash FileCheckSummer::Hash(void)
+MD5Hash FileCheckSummer::Hash(void) const // 2014/10/25 method is now const
 {
   MD5Context context;
   context.Update(outpointer, (size_t)blocksize);
@@ -223,7 +251,7 @@ MD5Hash FileCheckSummer::Hash(void)
   return hash;
 }
 
-u32 FileCheckSummer::ShortChecksum(u64 blocklength)
+u32 FileCheckSummer::ShortChecksum(u64 blocklength) const // 2014/10/25 method is now const
 {
   u32 crc = CRCUpdateBlock(~0, (size_t)blocklength, outpointer);
   
@@ -237,7 +265,7 @@ u32 FileCheckSummer::ShortChecksum(u64 blocklength)
   return crc;
 }
 
-MD5Hash FileCheckSummer::ShortHash(u64 blocklength)
+MD5Hash FileCheckSummer::ShortHash(u64 blocklength) const // 2014/10/25 method is now const
 {
   MD5Context context;
   context.Update(outpointer, (size_t)blocklength);

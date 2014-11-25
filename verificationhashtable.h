@@ -229,7 +229,7 @@ public:
   //                 for the fact that the block has already been found.
   const VerificationHashEntry* FindMatch(const VerificationHashEntry *nextentry,
                                          const Par2RepairerSourceFile *sourcefile,
-                                         FileCheckSummer &checksummer,
+                                         const FileCheckSummer &checksummer,
                                          bool &duplicate) const;
 
   // Look up based on the block crc
@@ -264,7 +264,7 @@ inline const VerificationHashEntry* VerificationHashTable::Lookup(const Verifica
 
 inline const VerificationHashEntry* VerificationHashTable::FindMatch(const VerificationHashEntry *suggestedentry,
                                                                      const Par2RepairerSourceFile *sourcefile,
-                                                                     FileCheckSummer &checksummer,
+                                                                     const FileCheckSummer &checksummer,
                                                                      bool &duplicate) const
 {
   duplicate = false;
