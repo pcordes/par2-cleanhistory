@@ -572,6 +572,7 @@ template <> bool ReedSolomon<Galois16>::InternalProcess(
     if (vsz) {
       if (asz) {
   #if __GNUC__ &&  __x86_64__
+    	printf("handling unaligned first %d bytes for output block %zd. (factor=%d)\n", asz, outputindex, (int) factor);
         rs_process_x86_64_scalar(outputbuffer, inputbuffer, asz, lhTable);
   #elif __GNUC__ &&  __i386__
         rs_process_i386_scalar(outputbuffer, inputbuffer, asz, lhTable);
@@ -632,7 +633,9 @@ template <> bool ReedSolomon<Galois16>::InternalProcess(
 
   if (size) {
   #if __GNUC__ && __x86_64__
-    rs_process_x86_64_scalar(outputbuffer, inputbuffer, size, lhTable);
+	  static bool printed = false;
+	  if (!printed) { printf("scalar cleanup of last %d bytes for output block %zd. (factor=%d)\n", size, outputindex, (int) factor); printed=true; }
+	  rs_process_x86_64_scalar(outputbuffer, inputbuffer, size, lhTable);
   #elif __GNUC__ &&  __i386__
     rs_process_i386_scalar(outputbuffer, inputbuffer, size, lhTable);
   #else // only Visual C++ produces decent x86 code for the following:

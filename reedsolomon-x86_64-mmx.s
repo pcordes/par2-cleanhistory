@@ -33,6 +33,9 @@
 #
 # void rs_process_x86_64_mmx(void* dst, const void* src, size_t size, unsigned* LH);
 #
+	movd		4(%rsi), %mm4
+	prefetchT0      (%rdi)
+
 	push		%rbp
 #	push		%rsi
 #	push		%rdi
@@ -42,10 +45,12 @@
 	mov			%rdx, %rcx						# number of bytes to process (multiple of 8)
 
 	mov			(%rsi), %edx					# load 1st 8 source bytes
-	movd		4(%rsi), %mm4
 
 	sub			$8, %rcx						# reduce # of loop iterations by 1
 	jz			last8
+#	prefetchT0       64(%rdi)
+#	prefetchT0       64(%rsi)
+#	prefetch0       128(%rsi)					# is it worth prefetching a lot, to trigger HW prefetch?
 	add			%rcx, %rsi						# point to last set of 8-bytes of input
 	add			%rcx, %rdi						# point to last set of 8-bytes of output
 	neg			%rcx							# convert byte size to count-up
@@ -76,7 +81,7 @@ loop:
 	shr			$16, %edx
 	movd		0x0400(%rbp, %rbx, 4), %mm1
 	movzx		%dl, %eax
-	movq		0(%rdi, %rcx, 1), %mm5
+# load of old dest to mm5 was here
 	movzx		%dh, %ebx
 	movd		0x0000(%rbp, %rax, 4), %mm2
 	movd		%mm4, %edx
@@ -93,7 +98,9 @@ loop:
 	pxor		%mm0, %mm1
 	punpckldq	0x0400(%rbp, %rbx, 4), %mm3
 	movd		%mm4, %edx						# prepare src bytes 3-0 for next loop
-	pxor		%mm5, %mm1
+#	movq		0(%rdi, %rcx, 1), %mm5
+#	pxor		%mm5, %mm1
+	pxor		0(%rdi, %rcx, 1), %mm1
 	pxor		%mm2, %mm3
 	psllq		$16, %mm3
 	psrlq		$32, %mm4						# align src bytes 7-4 for next loop
