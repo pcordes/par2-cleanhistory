@@ -61,6 +61,10 @@ if X86CPU
 ASMSOURCES = reedsolomon-$(ARCH_SCALAR)-scalar-$(PLATFORM).s reedsolomon-$(ARCH_MMX)-mmx-$(PLATFORM).s $(ASMSOURCES_PLATFORM)
 endif
 
+# -platform.s files are wrappers that get the right linker stuff for the symbol, and .include the real code
+reedsolomon-$(ARCH_SCALAR)-scalar-$(PLATFORM).o: reedsolomon-$(ARCH_SCALAR)-scalar-$(PLATFORM).s reedsolomon-$(ARCH_SCALAR)-scalar.s
+reedsolomon-$(ARCH_SCALAR)-mmx-$(PLATFORM).o: reedsolomon-$(ARCH_MMX)-mmx-$(PLATFORM).s reedsolomon-$(ARCH_MMX)-mmx.s
+
 if GPGPU_CUDA
 AM_CXXFLAGS_GPGPU = # -I/usr/local/cuda/include
 AM_LDFLAGS_GPGPU = -L/usr/local/cuda/lib -lcudart
