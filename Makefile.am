@@ -55,7 +55,7 @@ ASMSOURCES_PLATFORM = detect-mmx.s
 endif
 
 if AMD64
-ASMSOURCES = reedsolomon-$(ARCH_SCALAR)-scalar-$(PLATFORM).s reedsolomon-$(ARCH_MMX)-mmx-$(PLATFORM).s
+ASMSOURCES = reedsolomon-$(ARCH_SCALAR)-scalar-$(PLATFORM).s reedsolomon-$(ARCH_MMX)-mmx-$(PLATFORM).s reedsolomon-$(ARCH_MMX)-sse2-$(PLATFORM).s
 endif
 if X86CPU
 ASMSOURCES = reedsolomon-$(ARCH_SCALAR)-scalar-$(PLATFORM).s reedsolomon-$(ARCH_MMX)-mmx-$(PLATFORM).s $(ASMSOURCES_PLATFORM)
@@ -64,6 +64,7 @@ endif
 # -platform.s files are wrappers that get the right linker stuff for the symbol, and .include the real code
 reedsolomon-$(ARCH_SCALAR)-scalar-$(PLATFORM).o: reedsolomon-$(ARCH_SCALAR)-scalar-$(PLATFORM).s reedsolomon-$(ARCH_SCALAR)-scalar.s
 reedsolomon-$(ARCH_SCALAR)-mmx-$(PLATFORM).o: reedsolomon-$(ARCH_MMX)-mmx-$(PLATFORM).s reedsolomon-$(ARCH_MMX)-mmx.s
+reedsolomon-$(ARCH_SCALAR)-sse2-$(PLATFORM).o: reedsolomon-$(ARCH_MMX)-sse2-$(PLATFORM).s reedsolomon-$(ARCH_MMX)-sse2.s
 
 if GPGPU_CUDA
 AM_CXXFLAGS_GPGPU = # -I/usr/local/cuda/include
@@ -162,6 +163,9 @@ EXTRA_DIST = Makefile PORTING README_FIRST.txt ROADMAP par2cmdline.sln par2cmdli
 	reedsolomon-x86_64-scalar-darwin.s \
 	reedsolomon-x86_64-scalar-posix.s \
 	reedsolomon-x86_64-scalar.s \
+	reedsolomon-x86_64-sse2-darwin.s \
+	reedsolomon-x86_64-sse2-posix.s \
+	reedsolomon-x86_64-sse2.s \
 	reedsolomon-x86_64-mmx-darwin.s \
 	reedsolomon-x86_64-mmx-posix.s \
 	reedsolomon-x86_64-mmx.s

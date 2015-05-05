@@ -72,7 +72,7 @@ template <> bool ReedSolomon<Galois8>::SetInput(const vector<bool> &present)
 
   for (unsigned int index=0; index<inputcount; index++)
   {
-    // Record the index of the file in the datapresentindex array 
+    // Record the index of the file in the datapresentindex array
     // or the datamissingindex array
     if (present[index])
     {
@@ -207,7 +207,7 @@ template <> bool ReedSolomon<Galois16>::SetInput(const vector<bool> &present)
 
   for (unsigned int index=0; index<inputcount; index++)
   {
-    // Record the index of the file in the datapresentindex array 
+    // Record the index of the file in the datapresentindex array
     // or the datamissingindex array
     if (present[index])
     {
@@ -281,7 +281,7 @@ template <> bool ReedSolomon<Galois16>::SetInput(u32 count)
     #include <sys/sysctl.h>
 
     #if __x86_64__
-      extern "C" void rs_process_x86_64_scalar(void* dst, const void* src, size_t size, const u32* LH);
+      extern "C" void rs_process_x86_64_scalar(void* dst, const void* src, size_t size, const u16* LH);
     #else // __i386__
       extern "C" void rs_process_i386_scalar(void* dst, const void* src, size_t size, const u32* LH);
     #endif
@@ -300,7 +300,7 @@ template <> bool ReedSolomon<Galois16>::SetInput(u32 count)
     #include <sys/sysctl.h>
 
     #if __x86_64__
-  extern "C" void rs_process_x86_64_mmx(void* dst, const void* src, size_t size, const u32* LH);
+  extern "C" void rs_process_x86_64_mmx(void* dst, const void* src, size_t size, const u16* LH);
 //extern "C" void rs_process_x86_64_sse2(void* dst, const void* src, size_t size, const u32* LH);
     #else // __i386__
   extern "C" void rs_process_i686_mmx(void* dst, const void* src, size_t size, const u32* LH);
@@ -502,10 +502,11 @@ template <> bool ReedSolomon<Galois16>::InternalProcess(
   Galois16 *HH = &table[(2*256 + fh) * 256 + 0]; // factor.high * source.high
 
   // Combine the four multiplication tables into two
-  typedef unsigned int LHEntry;
+  typedef u16 LHEntry;
 //LHEntry L[512]; // Double the space required but
 //LHEntry H[512]; // save ONE shift instruction.
   // mult tables (using an array of ints forces the compiler to align on a 4-byte boundary):
+  // we want it aligned ona 64B cache line boundary, preferably all 1kiB in one page
   LHEntry lhTable[256*2 *1];
   LHEntry* L = &lhTable[0];
   LHEntry* H = &lhTable[256];
@@ -572,7 +573,7 @@ template <> bool ReedSolomon<Galois16>::InternalProcess(
     if (vsz) {
       if (asz) {
   #if __GNUC__ &&  __x86_64__
-    	printf("handling unaligned first %d bytes for output block %zd. (factor=%d)\n", asz, outputindex, (int) factor);
+    	printf("handling unaligned first %zd bytes for output block %u. (factor=%d)\n", asz, outputindex, (int) factor);
         rs_process_x86_64_scalar(outputbuffer, inputbuffer, asz, lhTable);
   #elif __GNUC__ &&  __i386__
         rs_process_i386_scalar(outputbuffer, inputbuffer, asz, lhTable);
@@ -581,7 +582,7 @@ template <> bool ReedSolomon<Galois16>::InternalProcess(
         u32 *src = (u32 *)inputbuffer;
         u32 *end = (u32 *)&((u8*)inputbuffer)[asz];
         u32 *dst = (u32 *)outputbuffer;
-  
+
         // Process the data
         do {
           u32 s = *src++;
@@ -634,7 +635,7 @@ template <> bool ReedSolomon<Galois16>::InternalProcess(
   if (size) {
   #if __GNUC__ && __x86_64__
 	  static bool printed = false;
-	  if (!printed) { printf("scalar cleanup of last %d bytes for output block %zd. (factor=%d)\n", size, outputindex, (int) factor); printed=true; }
+	  if (!printed) { printf("scalar cleanup of last %zd bytes for output block %u. (factor=%d)\n", size, outputindex, (int) factor); printed=true; }
 	  rs_process_x86_64_scalar(outputbuffer, inputbuffer, size, lhTable);
   #elif __GNUC__ &&  __i386__
     rs_process_i386_scalar(outputbuffer, inputbuffer, size, lhTable);
@@ -643,7 +644,7 @@ template <> bool ReedSolomon<Galois16>::InternalProcess(
     u32 *src = (u32 *)inputbuffer;
     u32 *end = (u32 *)&((u8*)inputbuffer)[size];
     u32 *dst = (u32 *)outputbuffer;
-  
+
     // Process the data
     do {
       u32 s = *src++;

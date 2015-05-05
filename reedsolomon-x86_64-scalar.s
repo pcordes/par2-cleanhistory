@@ -29,7 +29,7 @@
 #
 
 #
-# void rs_process_x86_64_scalar(void* dst, const void* src, size_t size, const u32* LH);
+# void rs_process_x86_64_scalar(void* dst (%rdi), const void* src (%rsi), size_t size (%rdx), const u32* LH (%rcx));
 #
 	push	%r8
 	push	%rbp
