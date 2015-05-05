@@ -50,6 +50,24 @@
 	add			%rcx, %rdi						# point to last set of 8-bytes of output
 	neg			%rcx							# convert byte size to count-up
 
+
+# This is faster than the scalar code mainly because wider load/stores
+# for the source and dest data leave the load unit(s) free
+# for 32b loads from the LH lookup table.
+# punpckldq just loads 32b from memory into the high half of the MMX reg
+
+# %rdi		# destination (function arg)
+# %rsi		# source  (function arg)
+# rbp: lookup table
+
+# eax: scratch (holds %dl)
+# ebx: scratch (holds %dh)
+
+# ecx: -count, counts upward to 0.
+# edx / mm4: src. (mm4 loads 64B.  edx gets 32B at a time from mm4, and is shifted by 16B for the low/high GF16)
+
+# mm5: previous value of dest
+
 	.align	4
 loop:
 	movzx		%dl, %eax

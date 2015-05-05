@@ -42,11 +42,21 @@
 	push	%rbx
 #	push	%rax
 
+# args
+#   %edi		# dst
+#   %esi		# src
+
 	mov		%rcx, %r8				# LH
 	mov		%rdx, %rcx				# cnt
 	add		%rcx, %rdi				# dst-end
 	add		%rcx, %rsi				# src-end
 	neg		%rcx					# -cnt
+
+# eax: sw = s >> 16 # 2nd GF16
+# ebx: scratch
+# ecx: -cnt, counts upward to 0
+# edx: src tmp
+# ebp: scratch
 
 	.align	4
 loop:
