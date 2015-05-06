@@ -89,42 +89,59 @@ loop:
 ### %rdx has 8 bytes data from (%rsi)
 # %rsi points to source data
 # %rdi points to the location in the output buffer to modify
-	movq		(%rsi), %rdx			# read-ahead next 8 source bytes
-	movq		%rdx, %rcx
-	shr			$32, %rdx						# get two parallel dependency chains going in %ecx and %edx
-	movzx		%cl, %eax
-	movzx		%ch, %ebx
-#	movzwl		0x0000(%rbp, %rax, 2), %r8d
-#	xor			0x0200(%rbp, %rbx, 2), %r8d		# result for src[0] (low 16bits of source).
-	movd		0x0000(%rbp, %rax, 2), %mm0		# go directly to the mm reg
-	pxor		0x0200(%rbp, %rbx, 2), %mm0		# PXOR from the LUT won't work: alignment!
-		# 32bit (64bit) xor will leave garbage in the upper 16 bits.
-		# movd will copy the garbage into a vector reg,
-		# but the following pinsrw will overwrite it
+	movq		(%rsi), %rdx			 # TODO: read-ahead next 8 source bytes to avoid potential false dep on store that's a multiple of 4k away
 	movzx		%dl, %eax
 	movzx		%dh, %ebx
-	movzwl		0x0000(%rbp, %rax, 2), %r10d
-	xor			0x0200(%rbp, %rbx, 2), %r10d	# result for src[2] (low 16 of upper 32b)
+
+	movq		%rdx, %rcx						# get two parallel dependency chains going in %ecx and %edx.
+	shr			$32, %rdx						# (costs one extra movq)
+
+	movzwl		0x0000(%rbp, %rax, 2), %eax
+	# 16b xor: pre-Ivy Bridge, stall or extra uops when wider reg is read before the partial-reg write fully retires
+	# also, huge decode penalty for 16bit ops, before the loop is in the uop cache
+#	xor			0x0200(%rbp, %rbx, 2), %r8d		# result for src[0] (low 16bits of source).
+	movzwl		0x0200(%rbp, %rbx, 2), %ebx
+	xor			%ebx, %eax
+	movd		%eax, %mm0						# breaks dependency on previous iteration
+#	movd		0x0000(%rbp, %rax, 2), %mm0		# go directly to the mm reg.
+#	movd		0x0200(%rbp, %rbx, 2), %mm1		# PXOR from the LUT is unaligned, and bigger chance to cacheline split
+#	pxor		%mm1, %mm0
+		# 32bit xor (or 64bit pxor) xor will leave garbage in the upper bits.
+		# movd will copy the garbage into a vector reg, but the following pinsrw will overwrite it
+		# Problem with this approach: wider loads -> cacheline splits.  Also unaligned loads, if that matters
+	movzx		%dl, %eax
+	movzx		%dh, %ebx
+	movzwl		0x0000(%rbp, %rax, 2), %eax
+#	xor			0x0200(%rbp, %rbx, 2), %r10d	# result for src[2] (low 16 of upper 32b)
+	movzwl		0x0200(%rbp, %rbx, 2), %ebx
+	xor			%ebx, %eax
+	pinsrw		$2, %eax, %mm0
+
+	movq		(%rdi), %mm4
 
 	shr			$16, %ecx
 	shr			$16, %edx
 # first4_entry:  # not usable, would write before the beginning of the buffer.  Just make sure buffers are aligned!
 	movzx		%cl, %eax
 	movzx		%ch, %ebx
-	movzwl		0x0000(%rbp, %rax, 2), %ecx		# %r9d, but using %ecx saves a REX byte
-	xor			0x0200(%rbp, %rbx, 2), %ecx		# result for src[1]
+	movzwl		0x0000(%rbp, %rax, 2), %eax		# %r9d, but using %ecx saves a REX byte
+#	xor			0x0200(%rbp, %rbx, 2), %ecx		# result for src[1]
+	movzwl		0x0200(%rbp, %rbx, 2), %ebx
+	xor			%ebx, %eax
+	pinsrw		$1, %eax, %mm0
+
 	movzx		%dl, %eax
 	movzx		%dh, %ebx
 	movzwl		0x0000(%rbp, %rax, 2), %eax		# %r11d
-	xor			0x0200(%rbp, %rbx, 2), %eax		# result for src[3].
+#	xor			0x0200(%rbp, %rbx, 2), %eax		# result for src[3].
+	movzwl		0x0200(%rbp, %rbx, 2), %ebx
+	xor			%ebx, %eax
+	pinsrw		$3, %eax, %mm0
 
-	movq		(%rdi), %mm4
-
-#	do the first GF16 directly into mm0
 #	movd		%r8d, 		%mm0				# movd breaks any dependency on previous value of mm0
-	pinsrw		$1, %ecx,	%mm0
-	pinsrw		$2, %r10d,	%mm0
-	pinsrw		$3, %eax,	%mm0
+#	pinsrw		$1, %ecx,	%mm0
+#	pinsrw		$2, %r10d,	%mm0
+#	pinsrw		$3, %eax,	%mm0
 #	pxor		0(%rdi, %r15, 1), %mm0			# combine the result with previous contents of the buffer
 	pxor		%mm4, %mm0
 	movq		%mm0, 0(%rdi)
@@ -147,7 +164,9 @@ last8:
 	movzx		%cl, %eax
 	movzx		%ch, %ebx
 	movzwl		0x0000(%rbp, %rax, 2), %r8d
-	xor			0x0200(%rbp, %rbx, 2), %r8d		# result for src[0] (low 16bits of source).
+#	xor			0x0200(%rbp, %rbx, 2), %r8d		# result for src[0] (low 16bits of source).
+	movzwl		0x0200(%rbp, %rbx, 2), %eax
+	xor			%eax, %r8d
 		# 32bit xor will leave garbage in the upper 16 bits.
 		# movd will copy the garbage into a vector reg,
 		# but the following pinsrw will overwrite it
