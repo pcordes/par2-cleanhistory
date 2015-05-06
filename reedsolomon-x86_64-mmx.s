@@ -43,9 +43,9 @@
 #	push		%rdi
 	push		%rbx
 	#r8-11 can be modified
-	push		%r12
-	push		%r13
-	push		%r14
+#	push		%r12
+#	push		%r13
+#	push		%r14
 	push		%r15
 
 	mov			%rcx, %rbp						# combined multiplication table
@@ -88,7 +88,7 @@
 loop:
 	movzx		%dl, %eax
 	movzx		%dh, %ebx
-	movd		0x0000(%rbp, %rax, 2), %mm0
+	movd		0x0000(%rbp, %rax, 2), %mm0		# FIXME: there is no movw to mmx reg.  We need to mask off the bits we don't need
 	movd		0x0400(%rbp, %rbx, 2), %mm1
 	shr			$16, %edx
 	movzx		%dl, %eax
@@ -167,9 +167,9 @@ last8:
 	#
 	emms
 	pop			%r15
-	pop			%r14
-	pop			%r13
-	pop			%r12
+#	pop			%r14
+#	pop			%r13
+#	pop			%r12
 	pop			%rbx
 #	pop			%rdi
 #	pop			%rsi

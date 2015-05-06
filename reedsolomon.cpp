@@ -281,9 +281,9 @@ template <> bool ReedSolomon<Galois16>::SetInput(u32 count)
     #include <sys/sysctl.h>
 
     #if __x86_64__
-      extern "C" void rs_process_x86_64_scalar(void* dst, const void* src, size_t size, const u16* LH);
+      extern "C" void rs_process_x86_64_scalar(void* dst, const void* src, const u16* LH, size_t size);
     #else // __i386__
-      extern "C" void rs_process_i386_scalar(void* dst, const void* src, size_t size, const u32* LH);
+      extern "C" void rs_process_i386_scalar(void* dst, const void* src, const u32* LH, size_t size);
     #endif
   #endif
 
@@ -300,11 +300,11 @@ template <> bool ReedSolomon<Galois16>::SetInput(u32 count)
     #include <sys/sysctl.h>
 
     #if __x86_64__
-  extern "C" void rs_process_x86_64_mmx(void* dst, const void* src, size_t size, const u16* LH);
-//extern "C" void rs_process_x86_64_sse2(void* dst, const void* src, size_t size, const u32* LH);
+  extern "C" void rs_process_x86_64_mmx (void* dst, const void* src, const u16* LH, size_t size);
+  extern "C" void rs_process_x86_64_sse2(void* dst, const void* src, const u16* LH, size_t size);
     #else // __i386__
-  extern "C" void rs_process_i686_mmx(void* dst, const void* src, size_t size, const u32* LH);
-//extern "C" void rs_process_i686_sse2(void* dst, const void* src, size_t size, const u32* LH);
+  extern "C" void rs_process_i686_mmx(void* dst, const void* src, const u32* LH, size_t size);
+//extern "C" void rs_process_i686_sse2(void* dst, const void* src, const u32* LH, size_t size);
     #endif
 
 /* GCC produces reasonably good code but it is not as good as the hand-written assembly because
@@ -565,6 +565,7 @@ template <> bool ReedSolomon<Galois16>::InternalProcess(
   #endif
 
   if (DetectVectorUnit::hasVectorUnit) {
+	  // assert (false);
     enum { sizeof_work_unit = DetectVectorUnit::sizeof_work_unit };
     // asz = alignment size = # of bytes to process using scalar code before vector code can be used
     // vsz = vector size = # of bytes to process using vector code
@@ -574,7 +575,7 @@ template <> bool ReedSolomon<Galois16>::InternalProcess(
       if (asz) {
   #if __GNUC__ &&  __x86_64__
     	printf("handling unaligned first %zd bytes for output block %u. (factor=%d)\n", asz, outputindex, (int) factor);
-        rs_process_x86_64_scalar(outputbuffer, inputbuffer, asz, lhTable);
+        // rs_process_x86_64_scalar(outputbuffer, inputbuffer, lhTable, asz);
   #elif __GNUC__ &&  __i386__
         rs_process_i386_scalar(outputbuffer, inputbuffer, asz, lhTable);
   #else
@@ -616,8 +617,9 @@ template <> bool ReedSolomon<Galois16>::InternalProcess(
       } // if (asz)
 
   #if __GNUC__ &&  __x86_64__
-      rs_process_x86_64_mmx(outputbuffer, inputbuffer, vsz, lhTable);
-  #elif __GNUC__ &&  __i386__
+      //rs_process_x86_64_mmx(outputbuffer, inputbuffer, vsz, lhTable);
+      rs_process_x86_64_sse2(outputbuffer, inputbuffer, lhTable, vsz);
+   #elif __GNUC__ &&  __i386__
       rs_process_i686_mmx(outputbuffer, inputbuffer, vsz, lhTable);
     //rs_process_i686_sse2(outputbuffer, inputbuffer, vsz, lhTable);
   #elif defined(WIN32)
@@ -636,7 +638,7 @@ template <> bool ReedSolomon<Galois16>::InternalProcess(
   #if __GNUC__ && __x86_64__
 	  static bool printed = false;
 	  if (!printed) { printf("scalar cleanup of last %zd bytes for output block %u. (factor=%d)\n", size, outputindex, (int) factor); printed=true; }
-	  rs_process_x86_64_scalar(outputbuffer, inputbuffer, size, lhTable);
+	  rs_process_x86_64_scalar(outputbuffer, inputbuffer, lhTable, size);
   #elif __GNUC__ &&  __i386__
     rs_process_i386_scalar(outputbuffer, inputbuffer, size, lhTable);
   #else // only Visual C++ produces decent x86 code for the following:
