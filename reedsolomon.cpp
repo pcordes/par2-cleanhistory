@@ -276,6 +276,55 @@ template <> bool ReedSolomon<Galois16>::SetInput(u32 count)
 
 #ifdef LONGMULTIPLY
 
+
+#if __x86_64__
+#if 1
+#include <mmintrin.h>
+void rs_process_intrins(void* destbuf, const void* sourcebuf, const u16* LH, size_t size)
+{
+  _mm_prefetch(destbuf, _MM_HINT_T0);
+  assert (! ((ptrdiff_t)destbuf & 0x07U));	// 8-byte aligned
+  assert (! ((ptrdiff_t)sourcebuf & 0x07U));	// 8-byte aligned
+
+  __m64 *dst = (__m64*)destbuf;
+  const u64 *src = (const u64*)sourcebuf;
+  register u64 s; // = *inputbuffer;
+//  register u32 shigh;
+  register u16 res0, res1, res2, res3;
+  while ((char*)src < (char*)sourcebuf+size)
+  {
+    s = *src;
+    __m64 d = *dst;
+
+    //   shigh = s >> 32;
+    res0  = LH[ u8(s) ];
+    res0 ^= LH[ 256 + u8(((u16)s) >> 8) ];
+    __m64 dtmp = _mm_cvtsi32_si64(res0);  // MOVD
+
+    s >>= 16;
+    res1  = LH[ u8(s) ];
+    res1 ^= LH[ 256 + u8(((u16)s) >> 8) ];
+    dtmp = _mm_insert_pi16(dtmp, res1, 1);
+    s >>= 16;
+    res2  = LH[ u8(s) ];
+    res2 ^= LH[ 256 + u8(((u16)s) >> 8) ];
+    dtmp = _mm_insert_pi16(dtmp, res2, 2);
+    s >>= 16;
+    res3  = LH[ u8(s) ];
+    res3 ^= LH[ 256 + u8(((u16)s) >> 8) ];
+    dtmp = _mm_insert_pi16(dtmp, res3, 3);
+
+    d = _mm_xor_si64(d, dtmp);
+    *dst = d;
+    dst++;
+    src++;
+  }
+  _mm_empty();
+
+}
+#endif // 0
+#endif
+
   #if __GNUC__ && (__i386__ || __x86_64__)
     #include <sys/types.h>
     #include <sys/sysctl.h>
@@ -420,7 +469,7 @@ template <> bool ReedSolomon<Galois16>::SetInput(u32 count)
 
   // This function is based in part on code by Paul Houle.
   // The original code used inlined assembly, but this version uses the Visual C++ compiler
-  // instrinsics so that the same function can be compiled for both x86 (using MMX) and x64
+  // intrinsics so that the same function can be compiled for both x86 (using MMX) and x64
   // (using SSE2), because the x64 C++ compiler does not support inlined assembly. The VC++
   // compiler does a pretty good job of instruction scheduling - not quite as good as the
   // hand-written assembly (IMHO) but good enough. It certainly produces better code than GCC.

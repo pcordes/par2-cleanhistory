@@ -74,7 +74,9 @@
 # %rdi		# destination (function arg)
 # %rsi		# source  (function arg)
 # %rbp: lookup table: 0-0x199: lookup for lower bytes.  0x200-0x399: lookup for upper bytes
-#   TODO: save %rbp + 0x200 in a register, to reduce AGU pressure?
+#   TODO: save %rbp + 0x200 in a register, to reduce AGU pressure?  nope, AGUs are fine
+#		It's only LEA that's slower with complex addressing modes.
+#		The offset makes the insn bigger, but we're probably fine when decoding from uop cache
 
 # eax: scratch (holds %dl)
 # ebx: scratch (holds %dh)
@@ -97,7 +99,7 @@ loop:
 	shr			$32, %rdx						# (costs one extra movq)
 
 	movzwl		0x0000(%rbp, %rax, 2), %eax
-	# 16b xor: pre-Ivy Bridge, stall or extra uops when wider reg is read before the partial-reg write fully retires
+	# 16b xor: pre-Ivy Bridge, stall or extra uop when wider reg is read before the partial-reg write fully retires
 	# also, huge decode penalty for 16bit ops, before the loop is in the uop cache
 #	xor			0x0200(%rbp, %rbx, 2), %r8d		# result for src[0] (low 16bits of source).
 	movzwl		0x0200(%rbp, %rbx, 2), %ebx
@@ -114,8 +116,8 @@ loop:
 	movzwl		0x0000(%rbp, %rax, 2), %eax
 #	xor			0x0200(%rbp, %rbx, 2), %r10d	# result for src[2] (low 16 of upper 32b)
 	movzwl		0x0200(%rbp, %rbx, 2), %ebx
-	xor			%ebx, %eax
-	pinsrw		$2, %eax, %mm0
+	xor			%ebx, %eax			# One (fused) uop even with a memory operand
+	pinsrw		$2, %eax, %mm0		# PINSRW takes two uops.  MOVD / PUNPCKLDQ only take one
 
 	movq		(%rdi), %mm4
 
