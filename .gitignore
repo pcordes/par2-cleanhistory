@@ -1,0 +1,37 @@
+# when developing and you really want to clean everything up
+# run git clean -fdx
+# thx @spider-mario
+
+# compilation output
+par2
+*.o
+.deps/
+
+# test output
+*.trs
+*.log
+testdir/
+
+# autotools output
+aclocal.m4
+autom4te.cache/
+compile
+test-driver
+Makefile.in
+Makefile
+config.h
+config.status
+configure
+stamp-h
+stamp-h1
+
+test.*
+# Linux perf record output
+perf.*
+# gcc -fprofile-use
+*.gcda
+
+# eclipse stuff you get when you point it at a Makefile project
+.cproject
+.project
+.settings
