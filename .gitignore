@@ -35,3 +35,7 @@ perf.*
 .cproject
 .project
 .settings
+
+# par2tbb tarballs have MacOS properties floating around, and VC++ .suo
+._*
+*.suo
